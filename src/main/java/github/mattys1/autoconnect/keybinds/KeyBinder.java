@@ -1,12 +1,12 @@
 package github.mattys1.autoconnect.keybinds;
 
-import java.util.Map;
-
 import github.mattys1.autoconnect.Log;
 import github.mattys1.autoconnect.Reference;
 import net.minecraft.client.settings.KeyBinding;
 import net.minecraftforge.fml.client.registry.ClientRegistry;
 import org.lwjglx.input.Keyboard;
+
+import java.util.Map;
 
 public class KeyBinder {
 	public static final Map<KeyBinds, KeyBinding> bindings = Map.of(

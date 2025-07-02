@@ -1,20 +1,25 @@
 package github.mattys1.autoconnect;
 
+import github.mattys1.autoconnect.connection.ConnectionManager;
+import github.mattys1.autoconnect.connection.ConnectionPosition;
 import github.mattys1.autoconnect.keybinds.KeyBinder;
 import github.mattys1.autoconnect.keybinds.KeyBinds;
 import net.minecraft.client.Minecraft;
 import net.minecraft.entity.player.EntityPlayer;
+import net.minecraft.util.math.RayTraceResult;
+import net.minecraft.util.math.Vec3d;
 import net.minecraft.util.text.TextComponentString;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.fml.common.gameevent.InputEvent.KeyInputEvent;
 import net.minecraftforge.fml.common.gameevent.PlayerEvent.PlayerLoggedInEvent;
 import net.minecraftforge.fml.relauncher.Side;
 import net.minecraftforge.fml.relauncher.SideOnly;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+
+import java.util.Optional;
+import java.util.function.Supplier;
 
 public class EventHandler {
-	private static final Logger log = LoggerFactory.getLogger(EventHandler.class);
+	private static final ConnectionManager connectionManager = new ConnectionManager();
 
 	@SideOnly(Side.CLIENT)
 	@SubscribeEvent
@@ -34,22 +39,38 @@ public class EventHandler {
 			.filter(bind -> bind.getValue().isPressed())
 			.findFirst(); // assuming that only one bind can be pressed in a tick
 
-		player.sendMessage(new TextComponentString("keybind pressed: ".concat(pressedBind.toString())));
+		final Supplier<Optional<ConnectionPosition>> getWhatPlayerIsLookingAt = () -> {
+			final Vec3d lookVec =  player.getLookVec();
+			final Vec3d eyePos = player.getPositionEyes(1.0F);
+			final int playerReach = 5;
+
+			RayTraceResult collision = player.world.rayTraceBlocks(eyePos, eyePos.add(lookVec.scale(playerReach)));
+
+			return collision != null ?
+					Optional.of(new ConnectionPosition(collision.getBlockPos(), collision.sideHit))
+					: Optional.empty();
+		};
 
 		pressedBind.ifPresent(entry -> {
 			final KeyBinds keyCode = entry.getKey();
 
 			switch (keyCode) {
-				case BEGIN_CONNECTION:
-					Log.error("begin connection");
-					assert false : "begin connection not implemented";
+				case BEGIN_CONNECTION: {
+					Optional<ConnectionPosition> start = getWhatPlayerIsLookingAt.get();
+
+					start.ifPresent(connectionManager::beginConnection);
 					break;
-				case CONFIRM_CONNECTION:
-					assert false : "confirm connection not implemented";
-				break;
-				case CANCEL_CONNECTION:
-					assert false : "cancel connection not implemented";
-				break;
+				}
+				case CONFIRM_CONNECTION:{
+					Optional<ConnectionPosition> start = getWhatPlayerIsLookingAt.get();
+
+					start.ifPresent(connectionManager::confirmConnection);
+					break;
+				}
+				case CANCEL_CONNECTION: {
+					connectionManager.cancelConnection();
+					break;
+				}
 
 				default:
 					break;
