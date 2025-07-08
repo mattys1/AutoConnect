@@ -2,15 +2,20 @@ package github.mattys1.autoconnect.connection;
 
 import com.google.common.collect.ImmutableList;
 import github.mattys1.autoconnect.Log;
-import net.minecraft.block.Block;
 import net.minecraft.block.state.IBlockState;
 import net.minecraft.client.Minecraft;
-import net.minecraft.util.EnumParticleTypes;
+import net.minecraft.client.renderer.BufferBuilder;
+import net.minecraft.client.renderer.GlStateManager;
+import net.minecraft.client.renderer.RenderGlobal;
+import net.minecraft.client.renderer.Tessellator;
+import net.minecraft.client.renderer.vertex.DefaultVertexFormats;
+import net.minecraft.util.math.AxisAlignedBB;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.World;
+import org.lwjgl.opengl.GL11;
+import oshi.util.tuples.Pair;
 
 import java.util.*;
-import java.util.function.BiFunction;
 
 public class ConnectionManager {
     private boolean isPlanActive = false;
@@ -19,47 +24,38 @@ public class ConnectionManager {
 
     public ConnectionPosition getEndPos() { return endPos; }
 
-    private ImmutableList<BlockPos> getEmptySpaceAroundConnectionArea() {
-        assert startPos != null && endPos != null : "Attempted to get space without defining connection first";
+    private AxisAlignedBB getBoundingBoxOfConnectionArea() {
+        return new AxisAlignedBB(startPos.coordinates(), endPos.coordinates());
+    }
 
-        final BiFunction<BlockPos, BlockPos, BlockPos> assembleSmallerBlockPos =
-                (b1, b2) -> new BlockPos(
-                        Math.min(b1.getX(),b2.getX()),
-                        Math.min(b1.getY(),b2.getY()),
-                        Math.min(b1.getZ(),b2.getZ())
-                );
+private ImmutableList<BlockPos> getEmptySpaceAroundBoundingBox(final AxisAlignedBB boundingBox) {
+    assert startPos != null && endPos != null : "Attempted to get space without defining connection first";
 
-        final BiFunction<BlockPos, BlockPos, BlockPos> assembleBiggerBlockPos =
-                (b1, b2) -> new BlockPos(
-                        Math.max(b1.getX(),b2.getX()),
-                        Math.max(b1.getY(),b2.getY()),
-                        Math.max(b1.getZ(),b2.getZ())
-                );
-        final World world = Minecraft.getMinecraft().world;
+    final World world = Minecraft.getMinecraft().world;
 
-        final BlockPos smallerVals = assembleSmallerBlockPos.apply(startPos.coordinates(), endPos.coordinates());
-        final BlockPos biggerVals = assembleBiggerBlockPos.apply(startPos.coordinates(), endPos.coordinates());
+    assert boundingBox.minX <= boundingBox.maxX &&
+           boundingBox.minY <= boundingBox.maxY &&
+           boundingBox.minZ <= boundingBox.maxZ
+            : String.format("Invalid bounding box: min(%.1f,%.1f,%.1f), max(%.1f,%.1f,%.1f)",
+                    boundingBox.minX, boundingBox.minY, boundingBox.minZ,
+                    boundingBox.maxX, boundingBox.maxY, boundingBox.maxZ);
 
-        assert smallerVals.getX() <= biggerVals.getX()
-                && smallerVals.getY() <= biggerVals.getY()
-                && smallerVals.getZ() <= biggerVals.getZ()
-                : String.format("Smaller: %s, bigger: %s", smallerVals, biggerVals);
+    final ImmutableList.Builder<BlockPos> placeablePositions = new ImmutableList.Builder<>();
+    for(int x = (int) boundingBox.minX; x <= boundingBox.maxX; x++) {
+        for(int y = (int) boundingBox.minY; y <= boundingBox.maxY; y++) {
+            for(int z = (int) boundingBox.minZ; z <= boundingBox.maxZ; z++) {
+                final BlockPos pos = new BlockPos(x, y, z);
+                final IBlockState block = world.getBlockState(pos);
 
-        final ImmutableList.Builder<BlockPos> placeablePositions = new ImmutableList.Builder<>();// assume it's only air for now
-        for(int x = smallerVals.getX(); x <= biggerVals.getX(); x++) {
-            for(int y = smallerVals.getY(); y <= biggerVals.getY(); y++) {
-                for(int z = smallerVals.getZ(); z <= biggerVals.getZ(); z++) {
-                    final IBlockState block = world.getBlockState(new BlockPos(x, y, z));
-
-                    if(Objects.requireNonNull(block.getBlock().getRegistryName()).toString().equals("minecraft:air")) {
-                        placeablePositions.add(new BlockPos(x, y, z));
-                    }
+                if(Objects.requireNonNull(block.getBlock().getRegistryName()).toString().equals("minecraft:air")) {
+                    placeablePositions.add(pos);
                 }
             }
         }
-
-        return placeablePositions.build();
     }
+
+    return placeablePositions.build();
+}
 
     public void beginConnection(final ConnectionPosition start) {
         assert !isPlanActive : "Attempted to start connection plan while one was in progress";
@@ -77,12 +73,13 @@ public class ConnectionManager {
 
         Log.info("confirming connection {}", endPos);
 
-        final ImmutableList<BlockPos> placeableList = getEmptySpaceAroundConnectionArea();
+        final var boundingBox = getBoundingBoxOfConnectionArea();
+        final ImmutableList<BlockPos> placeableList = getEmptySpaceAroundBoundingBox(boundingBox);
 
-        placeableList.forEach((pos)
-                -> Minecraft.getMinecraft().world.spawnParticle(
-                        EnumParticleTypes.VILLAGER_HAPPY, pos.getX(), pos.getY(), pos.getZ(), 0, 0, 0
-        ));
+//        placeableList.forEach((pos) -> {
+//            RenderGlobal.drawBoundingBox(pos.getX() - 0.1, pos.getY() - 0.1, pos.getZ() - 0.1,
+//                    pos.getX() + 1.1, pos.getY() + 1.1, pos.getZ() + 1.1, 1.0f, 0.0f, 0.0f, 1.0f);
+//        });
 
 
         Log.info("placeable list: {}", placeableList);
@@ -109,6 +106,24 @@ public class ConnectionManager {
         endPos = end;
 
         Log.info("updating end pos, {}", endPos);
+    }
+
+    public void dbg_renderBoundingBoxOfConnection() {
+        if(!isPlanActive || startPos == null || endPos == null) {
+            return;
+        }
+
+        final var boundingBox = getBoundingBoxOfConnectionArea();
+        Log.info("Rendering bounding box: {}", boundingBox);
+
+//        RenderGlobal.drawSelectionBoundingBox(boundingBox, 1.0f, 1.0f, 1.0f, 1.0f);
+
+        RenderGlobal.drawBoundingBox(
+                boundingBox.minX, boundingBox.minY, boundingBox.minZ,
+                boundingBox.maxX + 1, boundingBox.maxY + 1, boundingBox.maxZ + 1,
+                1.0f, 1.0f, 1.0f, 1.0f
+        );
+
     }
 
     public boolean active() {
