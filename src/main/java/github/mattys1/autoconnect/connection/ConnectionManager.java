@@ -1,19 +1,19 @@
 package github.mattys1.autoconnect.connection;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableSet;
+import github.mattys1.autoconnect.Config;
 import github.mattys1.autoconnect.Log;
+import github.mattys1.autoconnect.connection.pathing.RouteBuilder;
 import net.minecraft.block.state.IBlockState;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.renderer.BufferBuilder;
-import net.minecraft.client.renderer.GlStateManager;
 import net.minecraft.client.renderer.RenderGlobal;
-import net.minecraft.client.renderer.Tessellator;
-import net.minecraft.client.renderer.vertex.DefaultVertexFormats;
 import net.minecraft.util.math.AxisAlignedBB;
 import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.Vec3i;
 import net.minecraft.world.World;
-import org.lwjgl.opengl.GL11;
-import oshi.util.tuples.Pair;
+import net.minecraftforge.fml.relauncher.Side;
+import net.minecraftforge.fml.relauncher.SideOnly;
 
 import java.util.*;
 
@@ -21,14 +21,20 @@ public class ConnectionManager {
     private boolean isPlanActive = false;
     private ConnectionPosition startPos = null;
     private ConnectionPosition endPos = null;
+    private final RouteBuilder builder = new RouteBuilder();
 
     public ConnectionPosition getEndPos() { return endPos; }
 
     private AxisAlignedBB getBoundingBoxOfConnectionArea() {
-        return new AxisAlignedBB(startPos.coordinates(), endPos.coordinates());
+       final Vec3i padding = new Vec3i(Config.SEARCH_MARGIN, Config.SEARCH_MARGIN, Config.SEARCH_MARGIN);
+
+        return new AxisAlignedBB(
+                startPos.coordinates().subtract(padding),
+                endPos.coordinates().add(padding)
+        );
     }
 
-private ImmutableList<BlockPos> getEmptySpaceAroundBoundingBox(final AxisAlignedBB boundingBox) {
+private ImmutableSet<BlockPos> getEmptySpaceAroundBoundingBox(final AxisAlignedBB boundingBox) {
     assert startPos != null && endPos != null : "Attempted to get space without defining connection first";
 
     final World world = Minecraft.getMinecraft().world;
@@ -40,7 +46,7 @@ private ImmutableList<BlockPos> getEmptySpaceAroundBoundingBox(final AxisAligned
                     boundingBox.minX, boundingBox.minY, boundingBox.minZ,
                     boundingBox.maxX, boundingBox.maxY, boundingBox.maxZ);
 
-    final ImmutableList.Builder<BlockPos> placeablePositions = new ImmutableList.Builder<>();
+    final ImmutableSet.Builder<BlockPos> placeablePositions = ImmutableSet.builder();
     for(int x = (int) boundingBox.minX; x <= boundingBox.maxX; x++) {
         for(int y = (int) boundingBox.minY; y <= boundingBox.maxY; y++) {
             for(int z = (int) boundingBox.minZ; z <= boundingBox.maxZ; z++) {
@@ -74,7 +80,7 @@ private ImmutableList<BlockPos> getEmptySpaceAroundBoundingBox(final AxisAligned
         Log.info("confirming connection {}", endPos);
 
         final var boundingBox = getBoundingBoxOfConnectionArea();
-        final ImmutableList<BlockPos> placeableList = getEmptySpaceAroundBoundingBox(boundingBox);
+        final ImmutableSet<BlockPos> placeableSet = getEmptySpaceAroundBoundingBox(boundingBox);
 
 //        placeableList.forEach((pos) -> {
 //            RenderGlobal.drawBoundingBox(pos.getX() - 0.1, pos.getY() - 0.1, pos.getZ() - 0.1,
@@ -82,8 +88,9 @@ private ImmutableList<BlockPos> getEmptySpaceAroundBoundingBox(final AxisAligned
 //        });
 
 
-        Log.info("placeable list: {}", placeableList);
+        Log.info("placeable list: {}", placeableSet);
 
+        builder.clear();
         startPos = null;
         endPos = null;
         isPlanActive = false;
@@ -95,6 +102,7 @@ private ImmutableList<BlockPos> getEmptySpaceAroundBoundingBox(final AxisAligned
 
         Log.info("cancelling connection, {}", startPos);
 
+        builder.clear();
         startPos = null;
         isPlanActive = false;
     }
@@ -105,7 +113,11 @@ private ImmutableList<BlockPos> getEmptySpaceAroundBoundingBox(final AxisAligned
 
         endPos = end;
 
+        final ImmutableSet<BlockPos> placeables = getEmptySpaceAroundBoundingBox(getBoundingBoxOfConnectionArea());
+
         Log.info("updating end pos, {}", endPos);
+
+        builder.addPositionsToRoute(placeables);
     }
 
     public void dbg_renderBoundingBoxOfConnection() {
@@ -114,9 +126,6 @@ private ImmutableList<BlockPos> getEmptySpaceAroundBoundingBox(final AxisAligned
         }
 
         final var boundingBox = getBoundingBoxOfConnectionArea();
-        Log.info("Rendering bounding box: {}", boundingBox);
-
-//        RenderGlobal.drawSelectionBoundingBox(boundingBox, 1.0f, 1.0f, 1.0f, 1.0f);
 
         RenderGlobal.drawBoundingBox(
                 boundingBox.minX, boundingBox.minY, boundingBox.minZ,

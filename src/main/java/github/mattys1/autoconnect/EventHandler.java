@@ -14,11 +14,13 @@ import net.minecraftforge.client.event.RenderWorldLastEvent;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.fml.common.gameevent.InputEvent.KeyInputEvent;
 import net.minecraftforge.fml.common.gameevent.TickEvent;
+import net.minecraftforge.fml.relauncher.Side;
+import net.minecraftforge.fml.relauncher.SideOnly;
 
 import java.util.Optional;
 
 public class EventHandler {
-	private static final ConnectionManager connectionManager = new ConnectionManager();
+	private final ConnectionManager connectionManager = new ConnectionManager();
 
 	private Vec3d previousPlayerEyePos = null; // TODO: this should be moved
 
@@ -45,16 +47,17 @@ public class EventHandler {
 	public void onEvent(TickEvent.PlayerTickEvent event) {
 		if(
 				event.phase == TickEvent.Phase.START
-				|| !connectionManager.active()
+						|| event.side == Side.SERVER // IMPORTANT
+						|| !connectionManager.active()
 		) {
 			return;
 		}
 
-		final ConnectionPosition playerLookPos = getWhatPlayerIsLookingAt().orElse(null);
+		final Optional<ConnectionPosition> playerLookPos = getWhatPlayerIsLookingAt();
 		final EntityPlayer player = event.player;
 
 		if(
-				playerLookPos == null || playerLookPos.equals(connectionManager.getEndPos())
+				playerLookPos.isEmpty() || playerLookPos.get().equals(connectionManager.getEndPos())
 						&& previousPlayerEyePos.equals(player.getPositionEyes(1.0F))
 		) {
 			return;
@@ -62,7 +65,7 @@ public class EventHandler {
 
 		previousPlayerEyePos = player.getPositionEyes(1.0F);
 
-		connectionManager.updateEndPos(playerLookPos);
+		connectionManager.updateEndPos(playerLookPos.get());
 	}
 
 	@SubscribeEvent
