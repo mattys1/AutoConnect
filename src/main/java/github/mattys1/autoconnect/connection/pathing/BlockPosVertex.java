@@ -7,11 +7,13 @@ import java.util.List;
 import java.util.Objects;
 
 // this is dumb, but basically the only thing that should diffrentiate vertices is the encoded positions, so only that
-// needs to be compared.
+// needs to be compared and hashed.
 public class BlockPosVertex {
+    private static final long INFINITY = 1000000000;
+
     public BlockPos pos;
-    public int rhs = Integer.MAX_VALUE;
-    public int g = Integer.MAX_VALUE;
+    public long rhs = INFINITY;
+    public long g = INFINITY;
 //    public ArrayList<BlockPosVertex> edges;
 
     public BlockPosVertex(BlockPos aPos) {

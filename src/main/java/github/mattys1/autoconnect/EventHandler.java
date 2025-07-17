@@ -1,6 +1,6 @@
 package github.mattys1.autoconnect;
 
-import github.mattys1.autoconnect.connection.ConnectionManager;
+import github.mattys1.autoconnect.connection.Connection;
 import github.mattys1.autoconnect.connection.ConnectionPosition;
 import github.mattys1.autoconnect.keybinds.KeyBinder;
 import github.mattys1.autoconnect.keybinds.KeyBinds;
@@ -15,14 +15,13 @@ import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.fml.common.gameevent.InputEvent.KeyInputEvent;
 import net.minecraftforge.fml.common.gameevent.TickEvent;
 import net.minecraftforge.fml.relauncher.Side;
-import net.minecraftforge.fml.relauncher.SideOnly;
 
 import java.util.Optional;
 
 public class EventHandler {
-	private final ConnectionManager connectionManager = new ConnectionManager();
+	private Optional<Connection> connection = Optional.empty(); // TODO: support multiple connections in a queue. once one finishes, the other one is calculated.
 
-	private Vec3d previousPlayerEyePos = null; // TODO: this should be moved
+	private Optional<Vec3d> previousPlayerEyePos = Optional.empty(); // TODO: this should be moved
 
 	private Optional<ConnectionPosition> getWhatPlayerIsLookingAt() {
 		EntityPlayer player = Minecraft.getMinecraft().player;
@@ -44,11 +43,11 @@ public class EventHandler {
 	}
 
 	@SubscribeEvent
-	public void onEvent(TickEvent.PlayerTickEvent event) {
+	public void onPlayerTick(TickEvent.PlayerTickEvent event) {
 		if(
-				event.phase == TickEvent.Phase.START
+				connection.isEmpty()
+						|| event.phase == TickEvent.Phase.START
 						|| event.side == Side.SERVER // IMPORTANT
-						|| !connectionManager.active()
 		) {
 			return;
 		}
@@ -57,44 +56,40 @@ public class EventHandler {
 		final EntityPlayer player = event.player;
 
 		if(
-				playerLookPos.isEmpty() || playerLookPos.get().equals(connectionManager.getEndPos())
+				playerLookPos.isEmpty() || playerLookPos.get().equals(connection.get().getEndPos())
 						&& previousPlayerEyePos.equals(player.getPositionEyes(1.0F))
 		) {
 			return;
 		}
 
-		previousPlayerEyePos = player.getPositionEyes(1.0F);
+		previousPlayerEyePos = Optional.ofNullable(player.getPositionEyes(1.0f));
 
-		connectionManager.updateEndPos(playerLookPos.get());
+		connection.get().updateEndPos(playerLookPos.get());
 	}
 
 	@SubscribeEvent
 	public void onRenderWorldLast(RenderWorldLastEvent event) {
-		// Get the player's position
+		if(connection.isEmpty()) return;
+
 		Minecraft mc = Minecraft.getMinecraft();
 		Entity entity = mc.getRenderViewEntity();
 		if (entity == null) return;
 
-		// Save the current render state
 		GlStateManager.pushMatrix();
 
-		// Adjust rendering for player position (offset by partial ticks)
 		double d0 = entity.lastTickPosX + (entity.posX - entity.lastTickPosX) * event.getPartialTicks();
 		double d1 = entity.lastTickPosY + (entity.posY - entity.lastTickPosY) * event.getPartialTicks();
 		double d2 = entity.lastTickPosZ + (entity.posZ - entity.lastTickPosZ) * event.getPartialTicks();
 
-		// Apply translation to render properly
 		GlStateManager.translate(-d0, -d1, -d2);
 
-		// Call your debug render method
-		connectionManager.dbg_renderBoundingBoxOfConnection();
+		connection.get().dbg_renderBoundingBoxOfConnection();
 
-		// Restore the render state
 		GlStateManager.popMatrix();
 	}
 
 	@SubscribeEvent
-	public void onEvent(KeyInputEvent event) {
+	public void onKeyInput(KeyInputEvent event) {
 		final var pressedBind = KeyBinder.bindings.entrySet().stream()
 			.filter(bind -> bind.getValue().isPressed())
 			.findFirst(); // assuming that only one bind can be pressed in a tick
@@ -106,15 +101,16 @@ public class EventHandler {
 				case BEGIN_CONNECTION: {
 					Optional<ConnectionPosition> start = getWhatPlayerIsLookingAt();
 
-					start.ifPresent(connectionManager::beginConnection);
+					start.ifPresent(pos -> { connection = Optional.of(new Connection(pos)); });
 					break;
 				}
 				case CONFIRM_CONNECTION:{
-					connectionManager.confirmConnection();
+					connection.ifPresent(Connection::confirmConnection);
+					connection = Optional.empty();
 					break;
 				}
 				case CANCEL_CONNECTION: {
-					connectionManager.cancelConnection();
+					connection = Optional.empty();
 					break;
 				}
 

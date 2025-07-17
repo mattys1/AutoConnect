@@ -3,21 +3,27 @@ package github.mattys1.autoconnect.connection.pathing;
 import com.google.common.collect.ImmutableSet;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Vec3i;
-import net.minecraftforge.fml.relauncher.Side;
-import net.minecraftforge.fml.relauncher.SideOnly;
 import org.jgrapht.graph.DefaultEdge;
 
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.Set;
 import java.util.stream.Collectors;
 
 public class RouteBuilder {
     private PathfindingGraph<BlockPosVertex, DefaultEdge> placeableGraph = new PathfindingGraph<>(DefaultEdge.class);
     private Set<BlockPos> oldPlaceables = Collections.emptySet();
+    private final BlockPosVertex start;
+    private BlockPosVertex end;
+
+    public RouteBuilder(final BlockPos startPos) {
+        start = new BlockPosVertex(startPos);
+        end = new BlockPosVertex(startPos);
+
+        addPositionsToRoute(ImmutableSet.of(start.pos));
+    }
 
     public void addPositionsToRoute(final ImmutableSet<BlockPos> newPlaceables) {
-        // only reliable way to tell if this is running on a server lmao
-
         final Set<BlockPos> inOldButNotNew = oldPlaceables.stream()
                 .filter((pos) -> !newPlaceables.contains(pos))
                 .collect(Collectors.toUnmodifiableSet());
@@ -28,17 +34,10 @@ public class RouteBuilder {
 
         if(inOldButNotNew.isEmpty() && inNewButNotOld.isEmpty()) { return; }
 
-//        assert placeableGraph.vertexSet().stream()
-//                .map(v -> v.pos)
-//                .filter(p -> inOldButNotNew.contains(p))
-//                .collect(Collectors.toSet()).equals(inOldButNotNew) : "retarted filter not working";
-
         final var toRemove = placeableGraph.vertexSet().stream()
                         .filter(v -> inOldButNotNew.contains(v.pos))
                         .collect(Collectors.toSet());
-        placeableGraph.removeAllVertices(
-                toRemove
-        );
+        placeableGraph.removeAllVertices(toRemove);
 
         Set<BlockPosVertex> vertsBeforeAdd = Set.copyOf(placeableGraph.vertexSet());
 

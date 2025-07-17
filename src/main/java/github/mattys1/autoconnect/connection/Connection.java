@@ -1,6 +1,5 @@
 package github.mattys1.autoconnect.connection;
 
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import github.mattys1.autoconnect.Config;
 import github.mattys1.autoconnect.Log;
@@ -12,16 +11,21 @@ import net.minecraft.util.math.AxisAlignedBB;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Vec3i;
 import net.minecraft.world.World;
-import net.minecraftforge.fml.relauncher.Side;
-import net.minecraftforge.fml.relauncher.SideOnly;
 
 import java.util.*;
 
-public class ConnectionManager {
-    private boolean isPlanActive = false;
-    private ConnectionPosition startPos = null;
-    private ConnectionPosition endPos = null;
-    private final RouteBuilder builder = new RouteBuilder();
+public class Connection {
+    private ConnectionPosition startPos;
+    private ConnectionPosition endPos;
+    private final RouteBuilder builder;
+
+    public Connection(final ConnectionPosition pStartPos) {
+        startPos = pStartPos;
+        endPos = pStartPos;
+        builder = new RouteBuilder(startPos.coordinates());
+
+        Log.info("beggining connection, {}", pStartPos);
+    }
 
     public ConnectionPosition getEndPos() { return endPos; }
 
@@ -63,18 +67,7 @@ private ImmutableSet<BlockPos> getEmptySpaceAroundBoundingBox(final AxisAlignedB
     return placeablePositions.build();
 }
 
-    public void beginConnection(final ConnectionPosition start) {
-        assert !isPlanActive : "Attempted to start connection plan while one was in progress";
-        assert startPos == null && endPos == null : "Attempted to start connection without proper cleanup of start and end vectors";
-
-        Log.info("beggining connection, {}", start);
-        startPos = start;
-
-        isPlanActive = true;
-    }
-
     public void confirmConnection() {
-        assert isPlanActive : "Attempted to confirm connection while one was not in progress";
         assert startPos != null && endPos != null : "Attempted to confirm connection, but the start vectors were not set";
 
         Log.info("confirming connection {}", endPos);
@@ -93,22 +86,9 @@ private ImmutableSet<BlockPos> getEmptySpaceAroundBoundingBox(final AxisAlignedB
         builder.clear();
         startPos = null;
         endPos = null;
-        isPlanActive = false;
-    }
-
-    public void cancelConnection() {
-        assert isPlanActive : "Attempted to cancel connection while one was not in progress";
-        assert startPos != null : "Attempted to cancel connection, that hadn't begun";
-
-        Log.info("cancelling connection, {}", startPos);
-
-        builder.clear();
-        startPos = null;
-        isPlanActive = false;
     }
 
     public void updateEndPos(final ConnectionPosition end) {
-        assert isPlanActive : "Attempted to update end pos on inactive plan";
         assert startPos != null : "Attempted to update connection end without defined start";
 
         endPos = end;
@@ -121,7 +101,7 @@ private ImmutableSet<BlockPos> getEmptySpaceAroundBoundingBox(final AxisAlignedB
     }
 
     public void dbg_renderBoundingBoxOfConnection() {
-        if(!isPlanActive || startPos == null || endPos == null) {
+        if(startPos == null || endPos == null) {
             return;
         }
 
@@ -133,9 +113,5 @@ private ImmutableSet<BlockPos> getEmptySpaceAroundBoundingBox(final AxisAlignedB
                 1.0f, 1.0f, 1.0f, 1.0f
         );
 
-    }
-
-    public boolean active() {
-        return isPlanActive;
     }
 }
