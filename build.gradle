@@ -38,6 +38,14 @@ base {
     archivesName.set(propertyString('mod_id'))
 }
 
+sourceSets {
+    test {
+        java {
+            srcDirs = ['src/test/java']
+        }
+    }
+}
+
 
 java {
     toolchain {
@@ -102,6 +110,12 @@ dependencies {
         testImplementation 'org.junit.jupiter:junit-jupiter:5.7.1'
         testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
     }
+    
+    testImplementation 'com.google.guava:guava:31.1-jre'
+    testImplementation sourceSets.main.output
+    testImplementation sourceSets.main.compileClasspath
+
+    implementation "com.googlecode.princeton-java-algorithms:algorithms:4.0.1"
 }
 
 apply from: 'gradle/scripts/dependencies.gradle'
@@ -195,6 +209,10 @@ test {
     if (propertyBool('show_testing_output')) {
         testLogging {
             showStandardStreams = true
+            exceptionFormat = 'full'
+            showStackTraces = true
+            showExceptions = true
+            showCauses = true
         }
     }
 }

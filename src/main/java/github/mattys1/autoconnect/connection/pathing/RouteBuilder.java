@@ -6,12 +6,11 @@ import net.minecraft.util.math.Vec3i;
 import org.jgrapht.graph.DefaultEdge;
 
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.Set;
 import java.util.stream.Collectors;
 
 public class RouteBuilder {
-    private PathfindingGraph<BlockPosVertex, DefaultEdge> placeableGraph = new PathfindingGraph<>(DefaultEdge.class);
+    private PathfindingGraph placeableGraph;
     private Set<BlockPos> oldPlaceables = Collections.emptySet();
     private final BlockPosVertex start;
     private BlockPosVertex end;
@@ -19,6 +18,7 @@ public class RouteBuilder {
     public RouteBuilder(final BlockPos startPos) {
         start = new BlockPosVertex(startPos);
         end = new BlockPosVertex(startPos);
+        placeableGraph = new PathfindingGraph(new BlockPosVertex(startPos));
 
         addPositionsToRoute(ImmutableSet.of(start.pos));
     }
@@ -116,7 +116,7 @@ public class RouteBuilder {
 
     // FIXME: this kind of sucks, instead connectionmanager should be replaced with instances of a connection class and the gc should handle cleanup
     public void clear() {
-        placeableGraph = new PathfindingGraph<>(DefaultEdge.class);
+        placeableGraph = new PathfindingGraph(start);
         oldPlaceables = Collections.emptySet();
     }
 }
