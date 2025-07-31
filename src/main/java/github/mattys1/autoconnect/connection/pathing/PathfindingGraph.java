@@ -180,15 +180,25 @@ class PathfindingGraph extends SimpleGraph<BlockPosVertex, DefaultEdge> {
         topIdx = 1;
     }
 
-//    public PathfindingGraph(Supplier<V> vertexSupplier, boolean weighted) {
-//        super(vertexSupplier, DefaultEdge::new, weighted);
-//    }
+    @Override
+    public boolean removeVertex(BlockPosVertex v) {
+        Integer handle = handleMap.get(v);
+        if(handle != null) {
+            assert inconsistent.contains(handle) : "handle in handle map during removal but not in queue";
+
+            inconsistent.delete(handle);
+            handleMap.remove(v);
+        }
+
+        return super.removeVertex(v);
+    }
 
     public ImmutableList<BlockPos> findPath(final BlockPosVertex end) {
         assert this.containsVertex(end) : "Graph doesn't contain end vertex for pathfinding";
 
         oldGoal.rhs = BlockPosVertex.INFINITY;
-        updateVertex(oldGoal, handleMap.get(oldGoal));
+
+        updateVertex(oldGoal, handleMap.getOrDefault(oldGoal, -1));
         end.rhs = 0;
         updateVertex(end, -1);
         assert !inconsistent.isEmpty() : "Inconsistent is empty after calling updateVertex in findPath";
