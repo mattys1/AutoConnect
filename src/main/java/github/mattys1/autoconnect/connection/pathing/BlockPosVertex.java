@@ -29,4 +29,10 @@ public class BlockPosVertex {
         return pos.hashCode();
     }
 
+    @Override
+    public String toString() {
+        return "BlockPosVertex{pos=" + pos +
+                ", g=" + (g >= INFINITY ? "∞" : g) +
+                ", rhs=" + (rhs >= INFINITY ? "∞" : rhs) + "}";
+    }
 }

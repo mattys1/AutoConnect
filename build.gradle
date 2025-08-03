@@ -247,7 +247,9 @@ tasks.withType(JavaCompile).configureEach {
 }
 
 tasks.named("runClient", JavaExec).configure {
-    jvmArgs("-ea")
+//    jvmArgs("-ea", "-XX:+HeapDumpOnOutOfMemoryError", "-XX:HeapDumpPath=./mem_dump")
+    jvmArgs(extra_jvm_args.split())
+    println "JVM args: ${extra_jvm_args}"
 }
 
 // (Optional) If you also want server assertions enabled:

@@ -11,9 +11,7 @@ import org.jgrapht.graph.SimpleGraph;
 import org.spongepowered.asm.mixin.Debug;
 
 import java.nio.channels.AsynchronousServerSocketChannel;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.List;
+import java.util.*;
 
 record Key(long k1, long k2) {
     public int compare(final Key other) {
@@ -169,7 +167,7 @@ class PathfindingGraph extends SimpleGraph<BlockPosVertex, DefaultEdge> {
 
         start = oStart;
 //        start.rhs = 0;
-        inconsistent = new IndexMinPQ<>(1000000); // should be big enough for everyone
+        inconsistent = new IndexMinPQ<>(10000000); // should be big enough for everyone
 
         oldGoal = start;
         oldGoal.rhs = 0;
@@ -193,8 +191,11 @@ class PathfindingGraph extends SimpleGraph<BlockPosVertex, DefaultEdge> {
         return super.removeVertex(v);
     }
 
-    public ImmutableList<BlockPos> findPath(final BlockPosVertex end) {
+    public List<BlockPos> findPath(final BlockPosVertex end) {
         assert this.containsVertex(end) : "Graph doesn't contain end vertex for pathfinding";
+
+        Log.info("Finding path in graph: {}", this);
+        Log.info("Graph has positions: {}, start: {}, end {}", this.vertexSet().stream().map(v -> v.pos).toList(), this.start.pos, end.pos);
 
         oldGoal.rhs = BlockPosVertex.INFINITY;
 
@@ -209,23 +210,42 @@ class PathfindingGraph extends SimpleGraph<BlockPosVertex, DefaultEdge> {
             Log.info("Vertex " + v.pos + ": g=" + v.g + ", rhs=" + v.rhs);
         }
 
-        ImmutableList.Builder<BlockPos> path = new ImmutableList.Builder<>();
+        final ArrayList<BlockPos> path = new ArrayList<>();
+        final HashSet<BlockPos> visited = new HashSet<>();
 
         BlockPosVertex next = start;
         if (next.g >= BlockPosVertex.INFINITY) {
-            return path.build();
+            return path;
         }
 
-        while (!next.equals(end)) {
-            next = neighborCache.neighborListOf(next).stream()
-                    .min(Comparator.comparingLong(v -> v.g + 1))
-                    .orElseThrow();
+        while(!next.equals(end)) {
+            visited.add(next.pos);
 
+            next = neighborCache.neighborListOf(next).stream()
+                    .filter(v -> !visited.contains(v.pos))
+                    .min(Comparator.comparingLong(v -> v.g /**+ 1**/))
+                    .orElse(new BlockPosVertex(new BlockPos(-1,-1,-1)));
+
+            if(next.g >= BlockPosVertex.INFINITY) {
+                return path;
+            }
+
+            assert !path.contains(next.pos) :
+                    String.format("Path cycle detected: current path: %s, duplicate vertex: %s, graph: %s, goal %s",
+                            path, next, this, end
+                    );
+
+            Log.info("Finalizing path retrieval, position: {}", next.pos);
             path.add(next.pos);
         }
 
         oldGoal = end;
 
-        return path.build();
+        return path;
+    }
+
+    @Override
+    public String toString() {
+        return String.format("Graph[vertices: %s, edges: %s start: %s]", vertexSet(), edgeSet(), start);
     }
 }

@@ -8,6 +8,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.GlStateManager;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.player.EntityPlayer;
+import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.RayTraceResult;
 import net.minecraft.util.math.Vec3d;
 import net.minecraftforge.client.event.RenderWorldLastEvent;
@@ -57,7 +58,8 @@ public class EventHandler {
 
 		if(
 				playerLookPos.isEmpty() || playerLookPos.get().equals(connection.get().getEndPos())
-						&& previousPlayerEyePos.equals(player.getPositionEyes(1.0F))
+						&& previousPlayerEyePos.isPresent()
+						&& new BlockPos(previousPlayerEyePos.get()).equals(new BlockPos(player.getPositionEyes(1.0F)))
 		) {
 			return;
 		}

@@ -1,5 +1,6 @@
 package github.mattys1.autoconnect.connection;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import github.mattys1.autoconnect.Config;
 import github.mattys1.autoconnect.Log;
@@ -7,6 +8,8 @@ import github.mattys1.autoconnect.connection.pathing.RouteBuilder;
 import net.minecraft.block.state.IBlockState;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.RenderGlobal;
+import net.minecraft.init.Blocks;
+import net.minecraft.util.EnumParticleTypes;
 import net.minecraft.util.math.AxisAlignedBB;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Vec3i;
@@ -22,7 +25,7 @@ public class Connection {
     public Connection(final ConnectionPosition pStartPos) {
         startPos = pStartPos;
         endPos = pStartPos;
-        builder = new RouteBuilder(startPos.coordinates());
+        builder = new RouteBuilder(startPos.getAdjacentOfFace());
 
         Log.info("beggining connection, {}", pStartPos);
     }
@@ -33,9 +36,9 @@ public class Connection {
        final Vec3i padding = new Vec3i(Config.SEARCH_MARGIN, Config.SEARCH_MARGIN, Config.SEARCH_MARGIN);
 
         return new AxisAlignedBB(
-                startPos.coordinates().subtract(padding),
-                endPos.coordinates().add(padding)
-        );
+                startPos.coordinates(),
+                endPos.coordinates()
+        ).grow(padding.getX(), padding.getY(), padding.getZ());
     }
 
 private ImmutableSet<BlockPos> getEmptySpaceAroundBoundingBox(final AxisAlignedBB boundingBox) {
@@ -72,20 +75,38 @@ private ImmutableSet<BlockPos> getEmptySpaceAroundBoundingBox(final AxisAlignedB
 
         Log.info("confirming connection {}", endPos);
 
-        final var boundingBox = getBoundingBoxOfConnectionArea();
-        final ImmutableSet<BlockPos> placeableSet = getEmptySpaceAroundBoundingBox(boundingBox);
+        final List<BlockPos> route = builder.getRoute();
 
-//        placeableList.forEach((pos) -> {
-//            RenderGlobal.drawBoundingBox(pos.getX() - 0.1, pos.getY() - 0.1, pos.getZ() - 0.1,
-//                    pos.getX() + 1.1, pos.getY() + 1.1, pos.getZ() + 1.1, 1.0f, 0.0f, 0.0f, 1.0f);
-//        });
+        Log.info("Calculated route to destination: {}", route);
 
+        for(final var pos : route) {
+            Minecraft.getMinecraft().world
+//                    .spawnParticle(
+//                            EnumParticleTypes.SMOKE_LARGE,
+//                            pos.getX() + 0.5,              // x coordinate (center of block)
+//                            pos.getY() + 0.5,              // y coordinate
+//                            pos.getZ() + 0.5,              // z coordinate
+//                            0.0,                           // x velocity
+//                            0.0,                           // y velocity
+//                            0.0                            // z velocity
+//                    );
+                    .setBlockState(pos, Blocks.GLASS.getDefaultState());
+        }
 
-        Log.info("placeable list: {}", placeableSet);
-
-        builder.clear();
-        startPos = null;
-        endPos = null;
+//        final var boundingBox = getBoundingBoxOfConnectionArea();
+//        final ImmutableSet<BlockPos> placeableSet = getEmptySpaceAroundBoundingBox(boundingBox);
+//
+////        placeableList.forEach((pos) -> {
+////            RenderGlobal.drawBoundingBox(pos.getX() - 0.1, pos.getY() - 0.1, pos.getZ() - 0.1,
+////                    pos.getX() + 1.1, pos.getY() + 1.1, pos.getZ() + 1.1, 1.0f, 0.0f, 0.0f, 1.0f);
+////        });
+//
+//
+//        Log.info("placeable list: {}", placeableSet);
+//
+//        builder.clear();
+//        startPos = null;
+//        endPos = null;
     }
 
     public void updateEndPos(final ConnectionPosition end) {
@@ -98,6 +119,7 @@ private ImmutableSet<BlockPos> getEmptySpaceAroundBoundingBox(final AxisAlignedB
         Log.info("updating end pos, {}", endPos);
 
         builder.addPositionsToRoute(placeables);
+        builder.setGoal(end.getAdjacentOfFace());
     }
 
     public void dbg_renderBoundingBoxOfConnection() {

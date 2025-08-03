@@ -1,16 +1,19 @@
 package github.mattys1.autoconnect.connection.pathing;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
+import github.mattys1.autoconnect.Log;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Vec3i;
 import org.jgrapht.graph.DefaultEdge;
 
 import java.util.Collections;
+import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
 public class RouteBuilder {
-    private PathfindingGraph placeableGraph;
+    private final PathfindingGraph placeableGraph;
     private Set<BlockPos> oldPlaceables = Collections.emptySet();
     private final BlockPosVertex start;
     private BlockPosVertex end;
@@ -39,7 +42,7 @@ public class RouteBuilder {
                         .collect(Collectors.toSet());
         placeableGraph.removeAllVertices(toRemove);
 
-        Set<BlockPosVertex> vertsBeforeAdd = Set.copyOf(placeableGraph.vertexSet());
+//        Set<BlockPosVertex> vertsBeforeAdd = Set.copyOf(placeableGraph.vertexSet());
 
         inNewButNotOld.stream()
                 .map(BlockPosVertex::new)
@@ -52,26 +55,17 @@ public class RouteBuilder {
         /* TODO: if no placeables were removed, we know the bounding box must have only increased therefore, we only need to
         check the sides, not positions in the box */
         for(final var nv : newVertices) {
-            for(final var ov : vertsBeforeAdd) {
-                BlockPos diff = ov.pos.subtract(nv.pos);
-                diff = new BlockPos(
-                        Math.abs(diff.getX()),
-                        Math.abs(diff.getY()),
-                        Math.abs(diff.getZ())
-                );
+            for(final var v : placeableGraph.vertexSet()) {
+                BlockPos diff = v.pos.subtract(nv.pos);
+                int absX = Math.abs(diff.getX());
+                int absY = Math.abs(diff.getY());
+                int absZ = Math.abs(diff.getZ());
 
-                if(diff.compareTo(new Vec3i(1,1,1)) > 0 || diff.compareTo(new Vec3i(0,0,0)) == 0) {
-                    continue;
+                if((absX == 1 && absY == 0 && absZ == 0) ||
+                        (absX == 0 && absY == 1 && absZ == 0) ||
+                        (absX == 0 && absY == 0 && absZ == 1)) {
+                    placeableGraph.addEdge(nv, v);
                 }
-
-                var test = Set.copyOf(placeableGraph.vertexSet());
-                assert placeableGraph.vertexSet().stream()
-                        .anyMatch(v -> v == nv)
-                        && placeableGraph.vertexSet().stream()
-                        .anyMatch(v -> v == ov)
-                        : "what a piece of shit library";
-
-                placeableGraph.addEdge(nv, ov);
             }
         }
 
@@ -114,9 +108,15 @@ public class RouteBuilder {
         // add differences to the graph
     }
 
-    // FIXME: this kind of sucks, instead connectionmanager should be replaced with instances of a connection class and the gc should handle cleanup
-    public void clear() {
-        placeableGraph = new PathfindingGraph(start);
-        oldPlaceables = Collections.emptySet();
+    public void setGoal(BlockPos end) {
+        final BlockPosVertex goal = new BlockPosVertex(end);
+        assert placeableGraph.containsVertex(goal) : String.format("Attempting to make a nonexistent vertex the goal, vertex set: %s, goal: %s",
+                placeableGraph.vertexSet().stream().map(v -> v.pos).toList(), goal.pos);
+
+        this.end = goal;
+    }
+
+    public List<BlockPos> getRoute() {
+        return placeableGraph.findPath(end);
     }
 }
