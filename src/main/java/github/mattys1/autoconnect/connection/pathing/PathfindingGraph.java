@@ -5,6 +5,7 @@ import edu.princeton.cs.algorithms.IndexMinPQ;
 import github.mattys1.autoconnect.Log;
 import net.minecraft.util.math.BlockPos;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.VisibleForTesting;
 import org.jgrapht.alg.util.NeighborCache;
 import org.jgrapht.graph.DefaultEdge;
 import org.jgrapht.graph.SimpleGraph;
@@ -205,10 +206,6 @@ class PathfindingGraph extends SimpleGraph<BlockPosVertex, DefaultEdge> {
         assert !inconsistent.isEmpty() : "Inconsistent is empty after calling updateVertex in findPath";
 
         computeShortestPath(end);
-        Log.info("After computeShortestPath:");
-        for (BlockPosVertex v : this.vertexSet()) {
-            Log.info("Vertex " + v.pos + ": g=" + v.g + ", rhs=" + v.rhs);
-        }
 
         final ArrayList<BlockPos> path = new ArrayList<>();
         final HashSet<BlockPos> visited = new HashSet<>();
@@ -226,7 +223,7 @@ class PathfindingGraph extends SimpleGraph<BlockPosVertex, DefaultEdge> {
                     .min(Comparator.comparingLong(v -> v.g /**+ 1**/))
                     .orElse(new BlockPosVertex(new BlockPos(-1,-1,-1)));
 
-            if(next.g >= BlockPosVertex.INFINITY) {
+            if(next.g >= BlockPosVertex.INFINITY || next.pos.equals(end.pos)) {
                 return path;
             }
 
@@ -241,6 +238,7 @@ class PathfindingGraph extends SimpleGraph<BlockPosVertex, DefaultEdge> {
 
         oldGoal = end;
 
+        assert !path.contains(end.pos) : "path contains the end vertex even though it shouldn't";
         return path;
     }
 

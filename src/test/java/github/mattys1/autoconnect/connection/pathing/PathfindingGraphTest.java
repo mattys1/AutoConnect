@@ -2,6 +2,8 @@ package github.mattys1.autoconnect.connection.pathing;
 
 import github.mattys1.autoconnect.Log;
 import io.netty.handler.timeout.TimeoutException;
+import net.minecraft.util.math.AxisAlignedBB;
+import org.jgrapht.alg.shortestpath.AStarShortestPath;
 import org.junit.jupiter.api.Test;
 import net.minecraft.util.math.BlockPos;
 import org.openjdk.nashorn.internal.ir.annotations.Ignore;
@@ -16,24 +18,54 @@ import java.util.stream.Stream;
 import static org.junit.jupiter.api.Assertions.*;
 
 public class PathfindingGraphTest {
+    private void connectVertices(PathfindingGraph graph) {
+        for(final var v1 : graph.vertexSet()) {
+            for(final var v2 : graph.vertexSet()) {
+                BlockPos diff = v2.pos.subtract(v1.pos);
+                int absX = Math.abs(diff.getX());
+                int absY = Math.abs(diff.getY());
+                int absZ = Math.abs(diff.getZ());
+
+                if((absX == 1 && absY == 0 && absZ == 0) ||
+                        (absX == 0 && absY == 1 && absZ == 0) ||
+                        (absX == 0 && absY == 0 && absZ == 1)) {
+                    graph.addEdge(v1, v2);
+                }
+            }
+        }
+    }
+
+    private List<BlockPos> getReferencePath(PathfindingGraph graph, BlockPosVertex start, BlockPosVertex end) {
+        final var path = new AStarShortestPath<>(
+                graph,
+                (v1, v2) -> {
+                    BlockPos pos1 = v1.pos;
+                    BlockPos pos2 = v2.pos;
+                    return Math.abs(pos1.getX() - pos2.getX()) +
+                            Math.abs(pos1.getY() - pos2.getY()) +
+                            Math.abs(pos1.getZ() - pos2.getZ());
+                }).getPath(start, end).getVertexList().stream().map(v -> v.pos).toList();
+        return path.subList(1, path.size() - 1);
+    }
+
     @Test
     public void testSimplePath() {
-        BlockPosVertex start = new BlockPosVertex(new BlockPos(0, 0, 0));
-        BlockPosVertex middle = new BlockPosVertex(new BlockPos(1, 0, 0));
-        BlockPosVertex end = new BlockPosVertex(new BlockPos(2, 0, 0));
+        BlockPosVertex start = new BlockPosVertex(new BlockPos(0, 56, 0));
+        BlockPosVertex middle = new BlockPosVertex(new BlockPos(1, 56, 0));
+        BlockPosVertex end = new BlockPosVertex(new BlockPos(2, 56, 0));
 
         PathfindingGraph graph = new PathfindingGraph(start);
 
         graph.addVertex(middle);
         graph.addVertex(end);
-        graph.addEdge(start, middle);
-        graph.addEdge(middle, end);
+        connectVertices(graph);
 
         List<BlockPos> path = graph.findPath(end);
 
-        assertEquals(2, path.size());
-        assertEquals(new BlockPos(1, 0, 0), path.get(0));
-        assertEquals(new BlockPos(2, 0, 0), path.get(1));
+//        assertEquals(2, path.size());
+//        assertEquals(new BlockPos(1, 0, 0), path.get(0));
+//        assertEquals(new BlockPos(2, 0, 0), path.get(1));
+        assertEquals(getReferencePath(graph, start, end), path);
     }
 
     @Test
@@ -46,12 +78,12 @@ public class PathfindingGraphTest {
 
         graph.addVertex(middle);
         graph.addVertex(end);
-        graph.addEdge(start, middle);
-        graph.addEdge(middle, end);
+        connectVertices(graph);
 
         List<BlockPos> path = graph.findPath(end);
 
-        assertEquals(Stream.of(middle, end).map(v -> v.pos).toList(), path);
+//        assertEquals(Stream.of(middle, end).map(v -> v.pos).toList(), path);
+        assertEquals(getReferencePath(graph, start, end), path);
     }
 
     @Test
@@ -75,25 +107,18 @@ public class PathfindingGraphTest {
         graph.addVertex(v12);
         graph.addVertex(v22);
 
-        graph.addEdge(start, v10);
-        graph.addEdge(v10, v20);
-        graph.addEdge(v02, v12);
-        graph.addEdge(v12, v22);
-
-        graph.addEdge(start, v01);
-        graph.addEdge(v01, v02);
-        graph.addEdge(v20, v21);
-        graph.addEdge(v21, v22);
+        connectVertices(graph);
 
         List<BlockPos> path = graph.findPath(v22);
 
-        assertEquals(4, path.size());
-        assertEquals(List.of(
-                v10.pos,
-                v20.pos,
-                v21.pos,
-                v22.pos
-        ), path);
+//        assertEquals(4, path.size());
+//        assertEquals(List.of(
+//                v10.pos,
+//                v20.pos,
+//                v21.pos,
+//                v22.pos
+//        ), path);
+        assertEquals(getReferencePath(graph, start, v22), path);
     }
 
     @Test
@@ -117,108 +142,109 @@ public class PathfindingGraphTest {
         graph.addVertex(v12);
         graph.addVertex(v22);
 
-        graph.addEdge(start, v10);
-        graph.addEdge(v10, v20);
-        graph.addEdge(v02, v12);
-        graph.addEdge(v12, v22);
-
-        graph.addEdge(start, v01);
-        graph.addEdge(v01, v02);
-        graph.addEdge(v20, v21);
-        graph.addEdge(v21, v22);
+        connectVertices(graph);
 
         final BlockPosVertex v23 = new BlockPosVertex(new BlockPos(2, 3, 0));
         final BlockPosVertex v32 = new BlockPosVertex(new BlockPos(3, 2, 0));
 
         graph.addVertex(v23);
-        graph.addEdge(v22, v23);
-
         graph.addVertex(v32);
-        graph.addEdge(v22, v32);
+
+        connectVertices(graph);
 
         graph.removeVertex(v21);
 
         List<BlockPos> path = graph.findPath(v23);
 
-        assertEquals(List.of(
-                v01.pos,
-                v02.pos,
-                v12.pos,
-                v22.pos,
-                v23.pos
-        ), path);
+//        assertEquals(List.of(
+//                v01.pos,
+//                v02.pos,
+//                v12.pos,
+//                v22.pos,
+//                v23.pos
+//        ), path);
+
+        assertEquals(getReferencePath(graph, start, v23), path);
 
     }
 
     @Test
-    public void testDumbLeak() {
-    BlockPos startPos = new BlockPos(-2642, 57, 383);
-    BlockPos endPos = new BlockPos(-2644, 56, 383);
+    public void testPathInCube() {
+        final AxisAlignedBB box = new AxisAlignedBB(new BlockPos(0, 0 ,0), new BlockPos(3, 3, 3));
+        final BlockPosVertex start = new BlockPosVertex(new BlockPos(box.minX, box.minY, box.minZ));
+        final BlockPosVertex end = new BlockPosVertex(new BlockPos(box.maxX, box.maxY, box.maxZ));
 
-    BlockPosVertex start = new BlockPosVertex(startPos);
-    PathfindingGraph graph = new PathfindingGraph(start);
+        final PathfindingGraph graph = new PathfindingGraph(start);
 
-    Map<BlockPos, BlockPosVertex> vertexMap = new HashMap<>();
-    vertexMap.put(startPos, start);
+        for(var x = box.minX + 1; x <= box.maxX; x++) {
+            for(var y = box.minY; y <= box.maxY; y++) {
+                for(var z = box.minZ; z <= box.maxZ; z++) {
+                    final BlockPosVertex vert = new BlockPosVertex(new BlockPos(x,y,z));
 
-    List<BlockPos> positions = List.of(
-        new BlockPos(-2643, 57, 383),
-        new BlockPos(-2641, 57, 384),
-        new BlockPos(-2641, 56, 383),
-        new BlockPos(-2642, 56, 384),
-        new BlockPos(-2641, 56, 384),
-        new BlockPos(-2641, 57, 382),
-        new BlockPos(-2642, 56, 382),
-        new BlockPos(-2643, 57, 384),
-        new BlockPos(-2641, 57, 383),
-        new BlockPos(-2641, 56, 382),
-        new BlockPos(-2642, 57, 384),
-        new BlockPos(-2643, 56, 384),
-        new BlockPos(-2643, 56, 383),
-        new BlockPos(-2643, 56, 382),
-        new BlockPos(-2643, 57, 382),
-        new BlockPos(-2642, 57, 382),
-        new BlockPos(-2644, 57, 384),
-        new BlockPos(-2644, 57, 383),
-        new BlockPos(-2644, 57, 382),
-        new BlockPos(-2644, 56, 384),
-        new BlockPos(-2644, 56, 382),
-        new BlockPos(-2645, 57, 384),
-        new BlockPos(-2645, 56, 384),
-        new BlockPos(-2645, 57, 383),
-        new BlockPos(-2645, 57, 382),
-        new BlockPos(-2645, 56, 382)
-    );
+                    if(vert.equals(start)) {
+                        continue;
+                    }
 
-        for (BlockPos pos : positions) {
-            if (!vertexMap.containsKey(pos)) {
-                BlockPosVertex vertex = new BlockPosVertex(pos);
-                graph.addVertex(vertex);
-                vertexMap.put(pos, vertex);
-            }
-        }
-
-        for (BlockPos pos1 : positions) {
-            for (BlockPos pos2 : positions) {
-                if (!pos1.equals(pos2) && isAdjacent(pos1, pos2)) {
-                    graph.addEdge(vertexMap.get(pos1), vertexMap.get(pos2));
+                    graph.addVertex(vert);
                 }
             }
         }
 
-        BlockPosVertex end = vertexMap.get(endPos);
+        connectVertices(graph);
+
+        final List<BlockPos> path = graph.findPath(end);
+
+        assertEquals(getReferencePath(graph, start, end), path);
+    }
+
+    @Test
+    public void testDumbLeak() {
+        BlockPosVertex start = new BlockPosVertex(new BlockPos(-2642, 57, 383));
+        BlockPosVertex end = new BlockPosVertex(new BlockPos(-2644, 56, 383));
+
+        PathfindingGraph graph = new PathfindingGraph(start);
+
+        List<BlockPosVertex> vertices = List.of(
+                new BlockPosVertex(new BlockPos(-2643, 57, 383)),
+                new BlockPosVertex(new BlockPos(-2641, 57, 384)),
+                new BlockPosVertex(new BlockPos(-2641, 56, 383)),
+                new BlockPosVertex(new BlockPos(-2642, 56, 384)),
+                new BlockPosVertex(new BlockPos(-2641, 56, 384)),
+                new BlockPosVertex(new BlockPos(-2641, 57, 382)),
+                new BlockPosVertex(new BlockPos(-2642, 56, 382)),
+                new BlockPosVertex(new BlockPos(-2643, 57, 384)),
+                new BlockPosVertex(new BlockPos(-2641, 57, 383)),
+                new BlockPosVertex(new BlockPos(-2641, 56, 382)),
+                new BlockPosVertex(new BlockPos(-2642, 57, 384)),
+                new BlockPosVertex(new BlockPos(-2643, 56, 384)),
+                new BlockPosVertex(new BlockPos(-2643, 56, 383)),
+                new BlockPosVertex(new BlockPos(-2643, 56, 382)),
+                new BlockPosVertex(new BlockPos(-2643, 57, 382)),
+                new BlockPosVertex(new BlockPos(-2642, 57, 382)),
+                new BlockPosVertex(new BlockPos(-2644, 57, 384)),
+                new BlockPosVertex(new BlockPos(-2644, 57, 383)),
+                new BlockPosVertex(new BlockPos(-2644, 57, 382)),
+                new BlockPosVertex(new BlockPos(-2644, 56, 384)),
+                new BlockPosVertex(new BlockPos(-2644, 56, 382)),
+                new BlockPosVertex(new BlockPos(-2645, 57, 384)),
+                new BlockPosVertex(new BlockPos(-2645, 56, 384)),
+                new BlockPosVertex(new BlockPos(-2645, 57, 383)),
+                new BlockPosVertex(new BlockPos(-2645, 57, 382)),
+                new BlockPosVertex(new BlockPos(-2645, 56, 382)),
+                end
+        );
+
+        for (BlockPosVertex vertex : vertices) {
+            graph.addVertex(vertex);
+        }
+
+        connectVertices(graph);
 
         List<BlockPos> path = graph.findPath(end);
 
-        assertNotEquals(path, Collections.emptyList());
-}
-
-private boolean isAdjacent(BlockPos pos1, BlockPos pos2) {
-    int dx = Math.abs(pos1.getX() - pos2.getX());
-    int dy = Math.abs(pos1.getY() - pos2.getY());
-    int dz = Math.abs(pos1.getZ() - pos2.getZ());
-    return (dx + dy + dz == 1);
-}
+//        assertNotEquals(path, Collections.emptyList());
+        assertEquals(getReferencePath(graph, start, end), path);
+    }
 
     @Test
     public void testNoPath() {
