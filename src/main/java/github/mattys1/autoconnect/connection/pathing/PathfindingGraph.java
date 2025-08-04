@@ -6,6 +6,7 @@ import github.mattys1.autoconnect.Log;
 import net.minecraft.util.math.BlockPos;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.VisibleForTesting;
+import org.jgrapht.Graph;
 import org.jgrapht.alg.util.NeighborCache;
 import org.jgrapht.graph.DefaultEdge;
 import org.jgrapht.graph.SimpleGraph;
@@ -206,9 +207,10 @@ class PathfindingGraph extends SimpleGraph<BlockPosVertex, DefaultEdge> {
         assert !inconsistent.isEmpty() : "Inconsistent is empty after calling updateVertex in findPath";
 
         computeShortestPath(end);
+        Log.info("Graph state after computeShortestPath: {}", this);
 
         final ArrayList<BlockPos> path = new ArrayList<>();
-        final HashSet<BlockPos> visited = new HashSet<>();
+//        final HashSet<BlockPos> visited = new HashSet<>();
 
         BlockPosVertex next = start;
         if (next.g >= BlockPosVertex.INFINITY) {
@@ -216,12 +218,15 @@ class PathfindingGraph extends SimpleGraph<BlockPosVertex, DefaultEdge> {
         }
 
         while(!next.equals(end)) {
-            visited.add(next.pos);
-
-            next = neighborCache.neighborListOf(next).stream()
-                    .filter(v -> !visited.contains(v.pos))
-                    .min(Comparator.comparingLong(v -> v.g /**+ 1**/))
-                    .orElse(new BlockPosVertex(new BlockPos(-1,-1,-1)));
+            List<BlockPosVertex> neighbors = neighborCache.neighborListOf(next);
+            if(neighbors.contains(end)) {
+                next = end;
+            } else {
+                next = neighbors.stream()
+                        .filter(v -> v.g < BlockPosVertex.INFINITY)
+                        .min(Comparator.comparingLong(v -> v.g))
+                        .orElse(new BlockPosVertex(new BlockPos(-1,-1,-1)));
+            }
 
             if(next.g >= BlockPosVertex.INFINITY || next.pos.equals(end.pos)) {
                 return path;

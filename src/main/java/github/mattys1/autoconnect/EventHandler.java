@@ -4,6 +4,7 @@ import github.mattys1.autoconnect.connection.Connection;
 import github.mattys1.autoconnect.connection.ConnectionPosition;
 import github.mattys1.autoconnect.keybinds.KeyBinder;
 import github.mattys1.autoconnect.keybinds.KeyBinds;
+import net.minecraft.block.state.IBlockState;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.GlStateManager;
 import net.minecraft.entity.Entity;
@@ -61,6 +62,12 @@ public class EventHandler {
 						&& previousPlayerEyePos.isPresent()
 						&& new BlockPos(previousPlayerEyePos.get()).equals(new BlockPos(player.getPositionEyes(1.0F)))
 		) {
+			return;
+		}
+
+		final var world = Minecraft.getMinecraft().world;
+		final BlockPos adjacentBlock = playerLookPos.get().getAdjacentOfFace();
+		if(!world.isAirBlock(adjacentBlock)) {
 			return;
 		}
 

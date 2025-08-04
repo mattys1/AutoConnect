@@ -206,6 +206,9 @@ test {
     javaLauncher.set(javaToolchains.launcherFor {
         languageVersion = JavaLanguageVersion.of(21)
     })
+
+    jvmArgs(extra_jvm_args.split())
+    println "JVM args: ${extra_jvm_args}"
     if (propertyBool('show_testing_output')) {
         testLogging {
             showStandardStreams = true

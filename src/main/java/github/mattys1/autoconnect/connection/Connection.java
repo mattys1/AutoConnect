@@ -58,9 +58,8 @@ private ImmutableSet<BlockPos> getEmptySpaceAroundBoundingBox(final AxisAlignedB
         for(int y = (int) boundingBox.minY; y <= boundingBox.maxY; y++) {
             for(int z = (int) boundingBox.minZ; z <= boundingBox.maxZ; z++) {
                 final BlockPos pos = new BlockPos(x, y, z);
-                final IBlockState block = world.getBlockState(pos);
 
-                if(Objects.requireNonNull(block.getBlock().getRegistryName()).toString().equals("minecraft:air")) {
+                if(world.isAirBlock(pos)) {
                     placeablePositions.add(pos);
                 }
             }
