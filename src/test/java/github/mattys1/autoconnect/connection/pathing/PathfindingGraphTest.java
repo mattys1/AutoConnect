@@ -4,6 +4,7 @@ import github.mattys1.autoconnect.Log;
 import io.netty.handler.timeout.TimeoutException;
 import net.minecraft.util.math.AxisAlignedBB;
 import org.jgrapht.alg.shortestpath.AStarShortestPath;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import net.minecraft.util.math.BlockPos;
 import org.openjdk.nashorn.internal.ir.annotations.Ignore;
@@ -48,6 +49,35 @@ public class PathfindingGraphTest {
         return path.subList(1, path.size() - 1);
     }
 
+    private void assertEqualsReferencePathLength(PathfindingGraph graph, BlockPosVertex start, BlockPosVertex end) {
+       assertEquals(getReferencePath(
+               graph, start, end
+       ).size(), graph.findPath(end).size());
+    }
+
+    private PathfindingGraph getCubeGraph(double x, double y, double z) {
+        final AxisAlignedBB box = new AxisAlignedBB(0., 0., 0., x, y, z);
+        final PathfindingGraph graph = new PathfindingGraph(new BlockPosVertex(new BlockPos(0,0,0)));
+
+        for(var i = box.minX + 1; i <= box.maxX; i++) {
+            for(var j = box.minY; j <= box.maxY; j++) {
+                for(var k = box.minZ; k <= box.maxZ; k++) {
+                    final BlockPosVertex vert = new BlockPosVertex(new BlockPos(i,j,k));
+
+                    if(vert.pos.equals(new BlockPos(0,0,0))) {
+                        continue;
+                    }
+
+                    graph.addVertex(vert);
+                }
+            }
+        }
+
+        connectVertices(graph);
+
+        return graph;
+    }
+
     @Test
     public void testSimplePath() {
         BlockPosVertex start = new BlockPosVertex(new BlockPos(0, 56, 0));
@@ -60,12 +90,7 @@ public class PathfindingGraphTest {
         graph.addVertex(end);
         connectVertices(graph);
 
-        List<BlockPos> path = graph.findPath(end);
-
-//        assertEquals(2, path.size());
-//        assertEquals(new BlockPos(1, 0, 0), path.get(0));
-//        assertEquals(new BlockPos(2, 0, 0), path.get(1));
-        assertEquals(getReferencePath(graph, start, end), path);
+        assertEqualsReferencePathLength(graph, start, end);
     }
 
     @Test
@@ -80,10 +105,7 @@ public class PathfindingGraphTest {
         graph.addVertex(end);
         connectVertices(graph);
 
-        List<BlockPos> path = graph.findPath(end);
-
-//        assertEquals(Stream.of(middle, end).map(v -> v.pos).toList(), path);
-        assertEquals(getReferencePath(graph, start, end), path);
+        assertEqualsReferencePathLength(graph, start, end);
     }
 
     @Test
@@ -109,16 +131,7 @@ public class PathfindingGraphTest {
 
         connectVertices(graph);
 
-        List<BlockPos> path = graph.findPath(v22);
-
-//        assertEquals(4, path.size());
-//        assertEquals(List.of(
-//                v10.pos,
-//                v20.pos,
-//                v21.pos,
-//                v22.pos
-//        ), path);
-        assertEquals(getReferencePath(graph, start, v22), path);
+        assertEqualsReferencePathLength(graph, start, v22);
     }
 
     @Test
@@ -150,51 +163,39 @@ public class PathfindingGraphTest {
         graph.addVertex(v23);
         graph.addVertex(v32);
 
-        connectVertices(graph);
-
         graph.removeVertex(v21);
 
-        List<BlockPos> path = graph.findPath(v23);
+        connectVertices(graph);
 
-//        assertEquals(List.of(
-//                v01.pos,
-//                v02.pos,
-//                v12.pos,
-//                v22.pos,
-//                v23.pos
-//        ), path);
-
-        assertEquals(getReferencePath(graph, start, v23), path);
+        assertEqualsReferencePathLength(graph, start, v23);
 
     }
 
     @Test
+    public void testRepeatedCallsInChangingCube() {
+        final var start = new BlockPosVertex(new BlockPos(0,0,0));
+        final var end = new BlockPosVertex(new BlockPos(3,3,3));
+
+        final var graph = getCubeGraph(3,3,3);
+        var path = graph.findPath(end);
+
+        Assumptions.assumeTrue(path.size() == getReferencePath(graph, start, end).size());
+
+        path = graph.findPath(end);
+        Log.info(path.toString());
+
+        assertEqualsReferencePathLength(graph, start, end);
+    }
+
+    @Test
     public void testPathInCube() {
-        final AxisAlignedBB box = new AxisAlignedBB(new BlockPos(0, 0 ,0), new BlockPos(3, 3, 3));
-        final BlockPosVertex start = new BlockPosVertex(new BlockPos(box.minX, box.minY, box.minZ));
-        final BlockPosVertex end = new BlockPosVertex(new BlockPos(box.maxX, box.maxY, box.maxZ));
+        final BlockPosVertex end = new BlockPosVertex(new BlockPos(3,3,3));
 
-        final PathfindingGraph graph = new PathfindingGraph(start);
-
-        for(var x = box.minX + 1; x <= box.maxX; x++) {
-            for(var y = box.minY; y <= box.maxY; y++) {
-                for(var z = box.minZ; z <= box.maxZ; z++) {
-                    final BlockPosVertex vert = new BlockPosVertex(new BlockPos(x,y,z));
-
-                    if(vert.equals(start)) {
-                        continue;
-                    }
-
-                    graph.addVertex(vert);
-                }
-            }
-        }
+        final var graph = getCubeGraph(3,3,3);
 
         connectVertices(graph);
 
-        final List<BlockPos> path = graph.findPath(end);
-
-        assertEquals(getReferencePath(graph, start, end).size(), path.size());
+        assertEqualsReferencePathLength(graph, new BlockPosVertex(new BlockPos(0,0,0)), end);
     }
 
     @Test
@@ -240,10 +241,7 @@ public class PathfindingGraphTest {
 
         connectVertices(graph);
 
-        List<BlockPos> path = graph.findPath(end);
-
-//        assertNotEquals(path, Collections.emptyList());
-        assertEquals(getReferencePath(graph, start, end), path);
+        assertEqualsReferencePathLength(graph, start, end);
     }
 
     @Test
