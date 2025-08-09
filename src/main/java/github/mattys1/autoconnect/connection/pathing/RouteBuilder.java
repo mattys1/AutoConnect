@@ -1,20 +1,19 @@
 package github.mattys1.autoconnect.connection.pathing;
 
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
-import github.mattys1.autoconnect.Log;
 import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Vec3i;
 import org.jgrapht.alg.shortestpath.AStarShortestPath;
 import org.jgrapht.graph.DefaultEdge;
+import org.jgrapht.graph.SimpleGraph;
 
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
 public class RouteBuilder {
-    private final PathfindingGraph placeableGraph;
+    private final SimpleGraph<BlockPosVertex, DefaultEdge> placeableGraph = new SimpleGraph<>(DefaultEdge.class);
     private Set<BlockPos> oldPlaceables = Collections.emptySet();
     private final BlockPosVertex start;
     private BlockPosVertex end;
@@ -22,9 +21,10 @@ public class RouteBuilder {
     public RouteBuilder(final BlockPos startPos) {
         start = new BlockPosVertex(startPos);
         end = new BlockPosVertex(startPos);
-        placeableGraph = new PathfindingGraph(new BlockPosVertex(startPos));
 
         addPositionsToRoute(ImmutableSet.of(start.pos));
+
+        placeableGraph.addVertex(start);
     }
 
     public void addPositionsToRoute(final ImmutableSet<BlockPos> newPlaceables) {
@@ -118,17 +118,16 @@ public class RouteBuilder {
     }
 
     public List<BlockPos> getRoute() {
-        assert placeableGraph.vertexSet().contains(start) : "i am going insane";
-        return placeableGraph.findPath(end);
-//        final var path = new AStarShortestPath<>(
-//                placeableGraph,
-//                (v1, v2) -> {
-//                    BlockPos pos1 = v1.pos;
-//                    BlockPos pos2 = v2.pos;
-//                    return Math.abs(pos1.getX() - pos2.getX()) +
-//                            Math.abs(pos1.getY() - pos2.getY()) +
-//                            Math.abs(pos1.getZ() - pos2.getZ());
-//                }).getPath(start, end).getVertexList().stream().map(v -> v.pos).toList();
-//        return path.subList(1, path.size() - 1);
+        final var path = new AStarShortestPath<>(
+                placeableGraph,
+                (v1, v2) -> {
+                    BlockPos pos1 = v1.pos;
+                    BlockPos pos2 = v2.pos;
+                    return Math.abs(pos1.getX() - pos2.getX()) +
+                            Math.abs(pos1.getY() - pos2.getY()) +
+                            Math.abs(pos1.getZ() - pos2.getZ());
+                }).getPath(start, end);
+
+        return path != null ? path.getVertexList().stream().map(v -> v.pos).toList() : Collections.emptyList();
     }
 }

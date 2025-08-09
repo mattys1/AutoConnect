@@ -3,8 +3,6 @@ package github.mattys1.autoconnect.connection;
 import net.minecraft.util.EnumFacing;
 import net.minecraft.util.math.BlockPos;
 
-import java.net.PortUnreachableException;
-
 public record ConnectionPosition(BlockPos coordinates, EnumFacing face) {
     public BlockPos getAdjacentOfFace() {
         final var pos = this.coordinates;
