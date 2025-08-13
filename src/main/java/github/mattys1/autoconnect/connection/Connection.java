@@ -10,6 +10,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.ScaledResolution;
 import net.minecraft.client.renderer.RenderGlobal;
 import net.minecraft.entity.player.EntityPlayer;
+import net.minecraft.entity.player.InventoryPlayer;
 import net.minecraft.init.Blocks;
 import net.minecraft.item.ItemStack;
 import net.minecraft.util.math.AxisAlignedBB;
@@ -20,17 +21,25 @@ import net.minecraft.world.World;
 import java.util.*;
 
 public class Connection {
-    private ConnectionPosition startPos;
+    private final ConnectionPosition startPos;
     private ConnectionPosition endPos;
     private final RouteBuilder builder;
     private final InventoryManager inventoryManager;
     private List<BlockPos> currentPath = Collections.emptyList();
 
-    public Connection(final ConnectionPosition pStartPos, EntityPlayer player) {
+    private Connection(
+            final ConnectionPosition pStartPos,
+            InventoryManager invManager
+    ) {
         startPos = pStartPos;
         endPos = pStartPos;
         builder = new RouteBuilder(startPos.getAdjacentOfFace());
-        inventoryManager = new InventoryManager(player.inventory);
+        inventoryManager = invManager;
+    }
+
+    public static Optional<Connection> create(final ConnectionPosition pStartPos, final EntityPlayer player) {
+        return InventoryManager.create(player.inventory)
+                .map(man -> new Connection(pStartPos, man));
     }
 
     public void onInventoryUpdate() {
@@ -90,12 +99,11 @@ public class Connection {
         }
     }
 
-    public void renderConnectionStatus(ScaledResolution resolution) {
+    public void renderConnectionStatus() {
         if(currentPath.equals(Collections.emptyList())) {
             Messanger.writeAboveHotbar(
                     "Couldn't calculate path to destination!",
-                    Colours.RED,
-                    resolution
+                    Colours.RED
             );
         } else {
             Messanger.writeAboveHotbar(String.format(
@@ -104,7 +112,7 @@ public class Connection {
                     inventoryManager.getConnectionItemCount(),
                     currentPath.size(),
                     inventoryManager.haveEnoughFor(currentPath.size()) ? "" : "Not enough items in inventory!"
-            ), inventoryManager.haveEnoughFor(currentPath.size()) ? Colours.GREEN : Colours.YELLOW, resolution);
+            ), inventoryManager.haveEnoughFor(currentPath.size()) ? Colours.GREEN : Colours.YELLOW);
         }
     }
 

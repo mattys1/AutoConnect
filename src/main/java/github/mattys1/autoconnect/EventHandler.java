@@ -2,6 +2,8 @@ package github.mattys1.autoconnect;
 
 import github.mattys1.autoconnect.connection.Connection;
 import github.mattys1.autoconnect.connection.ConnectionPosition;
+import github.mattys1.autoconnect.gui.Colours;
+import github.mattys1.autoconnect.gui.Messanger;
 import github.mattys1.autoconnect.keybinds.KeyBinder;
 import github.mattys1.autoconnect.keybinds.KeyBinds;
 import net.minecraft.client.Minecraft;
@@ -29,6 +31,7 @@ import java.util.Optional;
 public class EventHandler {
     private Optional<Connection> connection = Optional.empty(); // TODO: support multiple connections in a queue. once one finishes, the other one is calculated.
     private Optional<Vec3d> previousPlayerEyePos = Optional.empty(); // TODO: this should be moved
+    private long clientTickCount = 0;
 
     private Optional<ConnectionPosition> getWhatPlayerIsLookingAt() {
         EntityPlayer player = Minecraft.getMinecraft().player;
@@ -75,11 +78,19 @@ public class EventHandler {
 
     @SubscribeEvent
     public void onRenderOverlayPost(RenderGameOverlayEvent.Post event) {
-        connection.ifPresent(c -> c.renderConnectionStatus(event.getResolution()));
+        if(event.getType() != RenderGameOverlayEvent.ElementType.ALL) return;
+
+        // there probably is some way to not call this every tick, but for now this will do
+        connection.ifPresent(Connection::renderConnectionStatus);
+
+        Messanger.updateResolution(event.getResolution());
+        Messanger.renderTask(clientTickCount);
     }
 
     @SubscribeEvent
     public void onPlayerTick(TickEvent.PlayerTickEvent event) {
+        clientTickCount++;
+
         if(
                 connection.isEmpty()
                         || event.phase == TickEvent.Phase.START
@@ -145,7 +156,15 @@ public class EventHandler {
                     Optional<ConnectionPosition> start = getWhatPlayerIsLookingAt();
 
                     start.ifPresent(pos -> {
-                        connection = Optional.of(new Connection(pos, Minecraft.getMinecraft().player));
+                        connection = Connection.create(pos, Minecraft.getMinecraft().player);
+
+                        if(connection.isEmpty()) {
+                            Messanger.writeAboveHotbar(
+                                    "Couldn't create connection! Make sure you're holding a block in your hand.",
+                                    Colours.RED,
+                                    60
+                            );
+                        }
                     });
                     break;
                 }
