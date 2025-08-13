@@ -16,6 +16,7 @@ import net.minecraft.util.NonNullList;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.RayTraceResult;
 import net.minecraft.util.math.Vec3d;
+import net.minecraftforge.client.event.RenderGameOverlayEvent;
 import net.minecraftforge.client.event.RenderWorldLastEvent;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.fml.common.gameevent.InputEvent.KeyInputEvent;
@@ -70,6 +71,11 @@ public class EventHandler {
 
             }
         });
+    }
+
+    @SubscribeEvent
+    public void onRenderOverlayPost(RenderGameOverlayEvent.Post event) {
+        connection.ifPresent(c -> c.renderConnectionStatus(event.getResolution()));
     }
 
     @SubscribeEvent

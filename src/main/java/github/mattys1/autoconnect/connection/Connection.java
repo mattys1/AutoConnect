@@ -4,10 +4,14 @@ import com.google.common.collect.ImmutableSet;
 import github.mattys1.autoconnect.Config;
 import github.mattys1.autoconnect.Log;
 import github.mattys1.autoconnect.connection.pathing.RouteBuilder;
+import github.mattys1.autoconnect.gui.Colours;
+import github.mattys1.autoconnect.gui.Messanger;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.ScaledResolution;
 import net.minecraft.client.renderer.RenderGlobal;
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.init.Blocks;
+import net.minecraft.item.ItemStack;
 import net.minecraft.util.math.AxisAlignedBB;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Vec3i;
@@ -86,6 +90,24 @@ public class Connection {
         }
     }
 
+    public void renderConnectionStatus(ScaledResolution resolution) {
+        if(currentPath.equals(Collections.emptyList())) {
+            Messanger.writeAboveHotbar(
+                    "Couldn't calculate path to destination!",
+                    Colours.RED,
+                    resolution
+            );
+        } else {
+            Messanger.writeAboveHotbar(String.format(
+                    "Building path using: %s. Have %s in inventory of %s needed to build line. %s",
+                    new ItemStack(inventoryManager.connectionItem).getDisplayName(),
+                    inventoryManager.getConnectionItemCount(),
+                    currentPath.size(),
+                    inventoryManager.haveEnoughFor(currentPath.size()) ? "" : "Not enough items in inventory!"
+            ), inventoryManager.haveEnoughFor(currentPath.size()) ? Colours.GREEN : Colours.YELLOW, resolution);
+        }
+    }
+
     public void updateEndPos(final ConnectionPosition end) {
         assert startPos != null : "Attempted to update connection end without defined start";
 
@@ -93,13 +115,12 @@ public class Connection {
 
         final ImmutableSet<BlockPos> placeables = getEmptySpaceAroundBoundingBox(getBoundingBoxOfConnectionArea());
 
-        Log.info("updating end pos, {}", endPos);
-
         builder.addPositionsToRoute(placeables);
         builder.setGoal(end.getAdjacentOfFace());
 
         currentPath = builder.getRoute();
-        Log.info("route in update, {}", currentPath);
+
+//        Log.info("Have {} {}, and need {}", inventoryManager.getConnectionItemCount(), inventoryManager.connectionItem, currentPath.size());
     }
 
     public void dbg_renderBoundingBoxOfConnection() {
