@@ -7,10 +7,8 @@ import github.mattys1.autoconnect.connection.pathing.RouteBuilder;
 import github.mattys1.autoconnect.gui.Colours;
 import github.mattys1.autoconnect.gui.Messanger;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.ScaledResolution;
 import net.minecraft.client.renderer.RenderGlobal;
 import net.minecraft.entity.player.EntityPlayer;
-import net.minecraft.entity.player.InventoryPlayer;
 import net.minecraft.init.Blocks;
 import net.minecraft.item.ItemStack;
 import net.minecraft.util.math.AxisAlignedBB;
@@ -18,7 +16,9 @@ import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Vec3i;
 import net.minecraft.world.World;
 
-import java.util.*;
+import java.util.Collections;
+import java.util.List;
+import java.util.Optional;
 
 import static java.lang.Math.abs;
 
@@ -52,11 +52,15 @@ public class Connection {
 
     private AxisAlignedBB getBoundingBoxOfConnectionArea() {
         final Vec3i padding = new Vec3i(Config.SEARCH_MARGIN, Config.SEARCH_MARGIN, Config.SEARCH_MARGIN);
-
-        return new AxisAlignedBB(
+        final AxisAlignedBB box = new AxisAlignedBB(
                 startPos.coordinates(),
                 endPos.coordinates()
         ).grow(padding.getX(), padding.getY(), padding.getZ());
+
+        return new AxisAlignedBB(
+                box.minX, Math.clamp(box.minY, 0, 255), box.minZ,
+                box.maxX, Math.clamp(box.maxY, 0, 255), box.maxZ
+        );
     }
 
     private ImmutableSet<BlockPos> getEmptySpaceAroundBoundingBox(final AxisAlignedBB boundingBox) {
