@@ -16,9 +16,8 @@ import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Vec3i;
 import net.minecraft.world.World;
 
-import java.util.Collections;
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
+import java.util.stream.Collectors;
 
 import static java.lang.Math.abs;
 
@@ -63,7 +62,7 @@ public class Connection {
         );
     }
 
-    private ImmutableSet<BlockPos> getEmptySpaceAroundBoundingBox(final AxisAlignedBB boundingBox) {
+    private List<BlockPos> getEmptySpaceAroundBoundingBox(final AxisAlignedBB boundingBox) {
         assert startPos != null && endPos != null : "Attempted to get space without defining connection first";
 
         final World world = Minecraft.getMinecraft().world;
@@ -75,7 +74,7 @@ public class Connection {
                 boundingBox.minX, boundingBox.minY, boundingBox.minZ,
                 boundingBox.maxX, boundingBox.maxY, boundingBox.maxZ);
 
-        final ImmutableSet.Builder<BlockPos> placeablePositions = ImmutableSet.builder();
+        final List<BlockPos> placeablePositions = new ArrayList<>();
         for(int x = (int) boundingBox.minX; x <= boundingBox.maxX; x++) {
             for(int y = (int) boundingBox.minY; y <= boundingBox.maxY; y++) {
                 for(int z = (int) boundingBox.minZ; z <= boundingBox.maxZ; z++) {
@@ -88,7 +87,11 @@ public class Connection {
             }
         }
 
-        return placeablePositions.build();
+        assert new HashSet<>(placeablePositions).stream().sorted().toList().equals(
+            placeablePositions.stream().sorted().toList()
+        ) : "space around box contains duplicates";
+
+        return placeablePositions;
     }
 
     public void confirmConnection() {
@@ -129,7 +132,7 @@ public class Connection {
 
 
         long start = System.nanoTime();
-        final ImmutableSet<BlockPos> placeables = getEmptySpaceAroundBoundingBox(getBoundingBoxOfConnectionArea());
+        final List<BlockPos> placeables = getEmptySpaceAroundBoundingBox(getBoundingBoxOfConnectionArea());
         long endTime = System.nanoTime();
         Log.info("Got empty space in {}ms, with {} air blocks", abs(start - endTime) / 1_000_000., placeables.size());
 
