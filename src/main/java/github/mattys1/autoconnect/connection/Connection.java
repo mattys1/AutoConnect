@@ -20,6 +20,8 @@ import net.minecraft.world.World;
 
 import java.util.*;
 
+import static java.lang.Math.abs;
+
 public class Connection {
     private final ConnectionPosition startPos;
     private ConnectionPosition endPos;
@@ -121,12 +123,23 @@ public class Connection {
 
         endPos = end;
 
-        final ImmutableSet<BlockPos> placeables = getEmptySpaceAroundBoundingBox(getBoundingBoxOfConnectionArea());
 
+        long start = System.nanoTime();
+        final ImmutableSet<BlockPos> placeables = getEmptySpaceAroundBoundingBox(getBoundingBoxOfConnectionArea());
+        long endTime = System.nanoTime();
+        Log.info("Got empty space in {}ms, with {} air blocks", abs(start - endTime) / 1_000_000., placeables.size());
+
+        start = System.nanoTime();
         builder.addPositionsToRoute(placeables);
+        endTime = System.nanoTime();
+        Log.info("Built graph in {}ms, with {} blocks", abs(start - endTime) / 1_000_000., placeables.size());
+
         builder.setGoal(end.getAdjacentOfFace());
 
+        start = System.nanoTime();
         currentPath = builder.getRoute();
+        endTime = System.nanoTime();
+        Log.info("Got route in {}ms, with {} blocks", abs(start - endTime) / 1_000_000., placeables.size());
 
 //        Log.info("Have {} {}, and need {}", inventoryManager.getConnectionItemCount(), inventoryManager.connectionItem, currentPath.size());
     }

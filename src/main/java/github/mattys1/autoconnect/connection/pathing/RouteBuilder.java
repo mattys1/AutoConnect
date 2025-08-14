@@ -6,10 +6,7 @@ import org.jgrapht.alg.shortestpath.AStarShortestPath;
 import org.jgrapht.graph.DefaultEdge;
 import org.jgrapht.graph.SimpleGraph;
 
-import java.util.Collection;
-import java.util.Collections;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
 
 public class RouteBuilder {
@@ -17,6 +14,7 @@ public class RouteBuilder {
     private Set<BlockPos> oldPlaceables = Collections.emptySet();
     private final BlockPosVertex start;
     private BlockPosVertex end;
+    private final HashMap<BlockPos, BlockPosVertex> vertexByPos = new HashMap<>();
 
     public RouteBuilder(final BlockPos startPos) {
         start = new BlockPosVertex(startPos);
@@ -25,6 +23,7 @@ public class RouteBuilder {
         addPositionsToRoute(ImmutableSet.of(start.pos));
 
         placeableGraph.addVertex(start);
+        vertexByPos.put(startPos, start);
     }
 
     public void addPositionsToRoute(final ImmutableSet<BlockPos> newPlaceables) {
@@ -36,36 +35,44 @@ public class RouteBuilder {
                 .filter((pos) -> !oldPlaceables.contains(pos))
                 .collect(Collectors.toUnmodifiableSet());
 
-        if(inOldButNotNew.isEmpty() && inNewButNotOld.isEmpty()) { return; }
+        if (inOldButNotNew.isEmpty() && inNewButNotOld.isEmpty()) {
+            return;
+        }
 
         final var toRemove = placeableGraph.vertexSet().stream()
-                        .filter(v -> inOldButNotNew.contains(v.pos))
-                        .collect(Collectors.toSet());
+                .filter(v -> inOldButNotNew.contains(v.pos))
+                .collect(Collectors.toSet());
         placeableGraph.removeAllVertices(toRemove);
+
+        for (final var v : toRemove) {
+            vertexByPos.remove(v.pos);
+        }
 
 //        Set<BlockPosVertex> vertsBeforeAdd = Set.copyOf(placeableGraph.vertexSet());
 
         inNewButNotOld.stream()
                 .map(BlockPosVertex::new)
-                .forEach(v -> placeableGraph.addVertex(v));
+                .forEach(v -> {
+                    placeableGraph.addVertex(v);
+                    vertexByPos.put(v.pos, v);
+                });
 
         final var newVertices = placeableGraph.vertexSet().stream()
                 .filter(v -> inNewButNotOld.contains(v.pos))
                 .collect(Collectors.toUnmodifiableSet());
 
-        /* TODO: if no placeables were removed, we know the bounding box must have only increased therefore, we only need to
-        check the sides, not positions in the box */
-        for(final var nv : newVertices) {
-            for(final var v : placeableGraph.vertexSet()) {
-                BlockPos diff = v.pos.subtract(nv.pos);
-                int absX = Math.abs(diff.getX());
-                int absY = Math.abs(diff.getY());
-                int absZ = Math.abs(diff.getZ());
+        final int[][] neighbourConstants = {
+                {1, 0, 0}, {-1, 0, 0},
+                {0, 1, 0}, {0, -1, 0},
+                {0, 0, 1}, {0, 0, -1}
+        };
 
-                if((absX == 1 && absY == 0 && absZ == 0) ||
-                        (absX == 0 && absY == 1 && absZ == 0) ||
-                        (absX == 0 && absY == 0 && absZ == 1)) {
-                    placeableGraph.addEdge(nv, v);
+        for (final var nv : newVertices) {
+            for (int[] d : neighbourConstants) {
+                BlockPos neighborPos = nv.pos.add(d[0], d[1], d[2]); // single allocation
+                BlockPosVertex neighbor = vertexByPos.get(neighborPos);
+                if (neighbor != null) {
+                    placeableGraph.addEdge(nv, neighbor);
                 }
             }
         }
@@ -75,10 +82,10 @@ public class RouteBuilder {
         assert placeableGraph.vertexSet().stream().map(v -> v.pos).collect(Collectors.toUnmodifiableSet()).size()
                 == placeableGraph.vertexSet().stream().map(v -> v.pos).toList().size()
                 : String.format(
-                        "There are duplicates in the graph, set size %d, list size %d",
+                "There are duplicates in the graph, set size %d, list size %d",
                 placeableGraph.vertexSet().stream().map(v -> v.pos).collect(Collectors.toUnmodifiableSet()).size(),
                 placeableGraph.vertexSet().stream().map(v -> v.pos).toList().size()
-                );
+        );
 
         assert ((java.util.function.BooleanSupplier) () -> {
             var actualList = placeableGraph.vertexSet().stream()
@@ -106,19 +113,20 @@ public class RouteBuilder {
                     missing
             ));
         }).getAsBoolean();
-        // add differences to the graph
+
+        assert vertexByPos.size() == placeableGraph.vertexSet().size() : String.format("Vertex map and vertexes in graph sizes differ, map: %d, graph: %d", vertexByPos.size(), placeableGraph.vertexSet().size());
     }
 
-    public void setGoal(BlockPos end) {
-        final BlockPosVertex goal = new BlockPosVertex(end);
-        assert placeableGraph.containsVertex(goal) : String.format("Attempting to make a nonexistent vertex the goal, vertex set: %s, goal: %s",
-                placeableGraph.vertexSet().stream().map(v -> v.pos).toList(), goal.pos);
+public void setGoal(BlockPos end) {
+    final BlockPosVertex goal = new BlockPosVertex(end);
+    assert placeableGraph.containsVertex(goal) : String.format("Attempting to make a nonexistent vertex the goal, vertex set: %s, goal: %s",
+            placeableGraph.vertexSet().stream().map(v -> v.pos).toList(), goal.pos);
 
-        this.end = goal;
-    }
+    this.end = goal;
+}
 
-    public List<BlockPos> getRoute() {
-        final var path = new AStarShortestPath<>(
+public List<BlockPos> getRoute() {
+    final var path = new AStarShortestPath<>(
                 placeableGraph,
                 (v1, v2) -> {
                     BlockPos pos1 = v1.pos;
