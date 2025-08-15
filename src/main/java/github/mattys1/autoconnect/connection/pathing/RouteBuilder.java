@@ -1,27 +1,59 @@
 package github.mattys1.autoconnect.connection.pathing;
 
-import com.google.common.collect.ImmutableSet;
 import github.mattys1.autoconnect.Log;
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
-import net.minecraft.block.Block;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.RenderGlobal;
 import net.minecraft.util.math.AxisAlignedBB;
 import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.ChunkPos;
 import net.minecraft.util.math.Vec3i;
-import org.jgrapht.alg.shortestpath.AStarShortestPath;
-import org.jgrapht.graph.DefaultEdge;
-import org.jgrapht.graph.SimpleGraph;
+import net.minecraft.world.World;
 
-import java.nio.file.Path;
 import java.util.*;
-import java.util.stream.Collectors;
+
+class Node {
+    private int g;
+    private int f;
+    private int portalId = -1;
+
+    public void setPortalId(int portalId) {
+        this.portalId = portalId;
+    }
+}
 
 class PathChunk {
     public final Vec3i pos;
+    private final Long2ObjectOpenHashMap<Node> nodeByPosition = new Long2ObjectOpenHashMap<>();
+
+    private void definePlaceablesInChunk() {
+        final AxisAlignedBB boundingBox = getChunkBounds();
+        final World world = Minecraft.getMinecraft().world;
+
+        assert boundingBox.minX <= boundingBox.maxX &&
+                boundingBox.minY <= boundingBox.maxY &&
+                boundingBox.minZ <= boundingBox.maxZ
+                : String.format("Invalid bounding box: min(%.1f,%.1f,%.1f), max(%.1f,%.1f,%.1f)",
+                boundingBox.minX, boundingBox.minY, boundingBox.minZ,
+                boundingBox.maxX, boundingBox.maxY, boundingBox.maxZ);
+
+        for(int x = (int) boundingBox.minX; x <= boundingBox.maxX; x++) {
+            for(int y = (int) boundingBox.minY; y <= boundingBox.maxY; y++) {
+                for(int z = (int) boundingBox.minZ; z <= boundingBox.maxZ; z++) {
+                    final BlockPos pos = new BlockPos(x, y, z);
+
+                    if(world.isAirBlock(pos)) {
+                        assert world.isValid(pos) : "Attempting to put invalid block pos into chunk";
+                        nodeByPosition.put(pos.toLong(), new Node());
+                    }
+                }
+            }
+        }
+
+    }
 
     private PathChunk(Vec3i vec) {
         pos = vec;
+        definePlaceablesInChunk();
     }
 
     public static PathChunk fromBlockCoordinates(final int x, final int y, final int z) {
@@ -38,6 +70,22 @@ class PathChunk {
                 new BlockPos(pos.getX() << 4, pos.getY() << 4, pos.getZ() << 4),
                 new BlockPos((pos.getX() << 4) + 15, (pos.getY() << 4) + 15, (pos.getZ() << 4) + 15)
         );
+    }
+
+    public long toLong() {
+        final int X_BITS = 28;
+        final int Y_BITS = 8;
+        final int Z_BITS = 28;
+
+        final int Z_SHIFT = 0;
+        final int Y_SHIFT = Z_SHIFT + Z_BITS;
+        final int X_SHIFT = Y_SHIFT + Y_BITS;
+
+        final long X_MASK = (1L << X_BITS) - 1L;
+        final long Y_MASK = (1L << Y_BITS) - 1L;
+        final long Z_MASK = (1L << Z_BITS) - 1L;
+
+        return ((long)this.pos.getX() & X_MASK) << X_SHIFT | ((long)this.pos.getY() & Y_MASK) << Y_SHIFT | ((long) this.pos.getZ() & Z_MASK);
     }
 
     @Override
@@ -62,7 +110,6 @@ class PathChunk {
 public class RouteBuilder {
     private final BlockPosVertex start;
     private BlockPosVertex end;
-    private final Long2ObjectOpenHashMap<BlockPosVertex> vertexByPos = new Long2ObjectOpenHashMap<>();
     private final HashSet<PathChunk> chunks = new HashSet<>();
 
     public RouteBuilder(final BlockPos startPos) {
@@ -70,8 +117,6 @@ public class RouteBuilder {
         end = new BlockPosVertex(startPos);
 
 //        addPositionsToRoute(List.of(start.pos));
-
-        vertexByPos.put(startPos.toLong(), start);
     }
 
     // start with chunks in the bounding box between start and end
@@ -113,6 +158,10 @@ public class RouteBuilder {
                 || c.pos.getY() < mins.getY() || c.pos.getY() > maxes.getY()
                 || c.pos.getZ() < mins.getZ() || c.pos.getZ() > maxes.getZ());
     }
+
+    private void processPortals() {
+        
+    };
 
     public void setGoal(BlockPos end) {
         final BlockPosVertex goal = new BlockPosVertex(end);
