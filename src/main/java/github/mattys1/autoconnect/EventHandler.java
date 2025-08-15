@@ -137,7 +137,7 @@ public class EventHandler {
 
         GlStateManager.translate(-d0, -d1, -d2);
 
-        connection.get().dbg_renderBoundingBoxOfConnection();
+        connection.get().dbg_renderConnectionInWorld();
 
         GlStateManager.popMatrix();
     }

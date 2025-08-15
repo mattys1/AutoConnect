@@ -1,6 +1,5 @@
 package github.mattys1.autoconnect.connection;
 
-import com.google.common.collect.ImmutableSet;
 import github.mattys1.autoconnect.Config;
 import github.mattys1.autoconnect.Log;
 import github.mattys1.autoconnect.connection.pathing.RouteBuilder;
@@ -17,7 +16,6 @@ import net.minecraft.util.math.Vec3i;
 import net.minecraft.world.World;
 
 import java.util.*;
-import java.util.stream.Collectors;
 
 import static java.lang.Math.abs;
 
@@ -128,41 +126,45 @@ public class Connection {
     public void updateEndPos(final ConnectionPosition end) {
         assert startPos != null : "Attempted to update connection end without defined start";
 
+        builder.setGoal(end.coordinates());
+
         endPos = end;
 
 
-        long start = System.nanoTime();
-        final List<BlockPos> placeables = getEmptySpaceAroundBoundingBox(getBoundingBoxOfConnectionArea());
-        long endTime = System.nanoTime();
-        Log.info("Got empty space in {}ms, with {} air blocks", abs(start - endTime) / 1_000_000., placeables.size());
-
-        start = System.nanoTime();
-        builder.addPositionsToRoute(placeables);
-        endTime = System.nanoTime();
-        Log.info("Built graph in {}ms, with {} blocks", abs(start - endTime) / 1_000_000., placeables.size());
-
-        builder.setGoal(end.getAdjacentOfFace());
-
-        start = System.nanoTime();
-        currentPath = builder.getRoute();
-        endTime = System.nanoTime();
-        Log.info("Got route in {}ms, with {} blocks", abs(start - endTime) / 1_000_000., placeables.size());
+//        long start = System.nanoTime();
+//        final List<BlockPos> placeables = getEmptySpaceAroundBoundingBox(getBoundingBoxOfConnectionArea());
+//        long endTime = System.nanoTime();
+//        Log.info("Got empty space in {}ms, with {} air blocks", abs(start - endTime) / 1_000_000., placeables.size());
+//
+//        start = System.nanoTime();
+//        builder.addPositionsToRoute(placeables);
+//        endTime = System.nanoTime();
+//        Log.info("Built graph in {}ms, with {} blocks", abs(start - endTime) / 1_000_000., placeables.size());
+//
+//        builder.setGoal(end.getAdjacentOfFace());
+//
+//        start = System.nanoTime();
+//        currentPath = builder.getRoute();
+//        endTime = System.nanoTime();
+//        Log.info("Got route in {}ms, with {} blocks", abs(start - endTime) / 1_000_000., placeables.size());
 
 //        Log.info("Have {} {}, and need {}", inventoryManager.getConnectionItemCount(), inventoryManager.connectionItem, currentPath.size());
     }
 
-    public void dbg_renderBoundingBoxOfConnection() {
-        if(startPos == null || endPos == null) {
-            return;
-        }
+    public void dbg_renderConnectionInWorld() {
+//        if(startPos == null || endPos == null) {
+//            return;
+//        }
+//
+//        final var boundingBox = getBoundingBoxOfConnectionArea();
+//
+//        RenderGlobal.drawBoundingBox(
+//                boundingBox.minX, boundingBox.minY, boundingBox.minZ,
+//                boundingBox.maxX + 1, boundingBox.maxY + 1, boundingBox.maxZ + 1,
+//                1.0f, 1.0f, 1.0f, 1.0f
+//        );
 
-        final var boundingBox = getBoundingBoxOfConnectionArea();
-
-        RenderGlobal.drawBoundingBox(
-                boundingBox.minX, boundingBox.minY, boundingBox.minZ,
-                boundingBox.maxX + 1, boundingBox.maxY + 1, boundingBox.maxZ + 1,
-                1.0f, 1.0f, 1.0f, 1.0f
-        );
+        builder.dbg_displayChunks();
 
     }
 }
