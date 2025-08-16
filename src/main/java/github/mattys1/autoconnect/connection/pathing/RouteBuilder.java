@@ -3,7 +3,6 @@ package github.mattys1.autoconnect.connection.pathing;
 import github.mattys1.autoconnect.Log;
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import it.unimi.dsi.fastutil.objects.Object2ObjectArrayMap;
-import net.minecraft.block.Block;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.GlStateManager;
 import net.minecraft.client.renderer.RenderGlobal;
@@ -21,8 +20,8 @@ import java.util.*;
 class Node {
     private int g;
     private int f;
-    public boolean isValidPortalCandidate = false;
-    public boolean isTraversed = false;
+    public Set<EnumFacing> validCandidateInSides = new HashSet<>();
+    public Set<EnumFacing> traversedInSides = new HashSet<>();
 }
 
 class Cluster {
@@ -88,55 +87,53 @@ class Cluster {
     private void fillPortal(BlockPos nodePos, Cluster adjacent, EnumFacing adjacentDirection) {
         final var startNode = nodeByPosition.get(nodePos.toLong());
         assert startNode != null;
-        if(startNode.isTraversed) return;
+        if(startNode.traversedInSides.contains(adjacentDirection)) return;
 
         final List<BlockPos> validPositions = new ArrayList<>(); // for postprocessing down the line
         final Stack<BlockPos> nodePositions = new Stack<>();
         nodePositions.add(nodePos);
         final Vec3i diffWithAdjacent = positionDifference(adjacent);
 
-        List<Vec3i> neighbourNodeOffsets;
-        switch (adjacentDirection) {
-            case UP, DOWN -> neighbourNodeOffsets = List.of(
+        List<Vec3i> neighbourNodeOffsets = switch (adjacentDirection) {
+            case UP, DOWN -> List.of(
                     new Vec3i(1, 0, 0),
                     new Vec3i(0, 0, 1),
                     new Vec3i(-1, 0, 0),
                     new Vec3i(0, 0, -1)
             );
-            case NORTH, SOUTH -> neighbourNodeOffsets = List.of(
+            case NORTH, SOUTH -> List.of(
                     new Vec3i(1, 0, 0),
                     new Vec3i(0, 1, 0),
                     new Vec3i(-1, 0, 0),
                     new Vec3i(0, -1, 0)
             );
-            case EAST, WEST -> neighbourNodeOffsets = List.of(
+            case EAST, WEST -> List.of(
                     new Vec3i(0, 1, 0),
                     new Vec3i(0, 0, 1),
                     new Vec3i(0, -1, 0),
                     new Vec3i(0, 0, -1)
             );
-            default -> throw new IllegalArgumentException("shut the hell up intellij");
-        }
+        };
 
         while(!nodePositions.empty()) {
             var pos = nodePositions.pop();
             final Node n = nodeByPosition.get(pos.toLong());
             assert n != null;
 
-            if(n.isTraversed) {
+            if(n.traversedInSides.contains(adjacentDirection)) {
                 continue;
             }
-            n.isTraversed = true;
+            n.traversedInSides.add(adjacentDirection);
 
             final Node adjacentCandidate = adjacent.nodeByPosition.get(pos.add(diffWithAdjacent).toLong());
             if(adjacentCandidate == null) {
                 continue;
             }
 
-            adjacentCandidate.isTraversed = true;
-            adjacentCandidate.isValidPortalCandidate = true;
+            adjacentCandidate.traversedInSides.add(adjacentDirection.getOpposite());
+            adjacentCandidate.validCandidateInSides.add(adjacentDirection.getOpposite());
 
-            n.isValidPortalCandidate = true;
+            n.validCandidateInSides.add(adjacentDirection);
             validPositions.add(pos);
 
             for(final var offset : neighbourNodeOffsets) {
