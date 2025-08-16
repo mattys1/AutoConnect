@@ -127,6 +127,7 @@ public class Connection {
         assert startPos != null : "Attempted to update connection end without defined start";
 
         builder.setGoal(end.coordinates());
+        builder.processPortals();
 
         endPos = end;
 
@@ -165,6 +166,5 @@ public class Connection {
 //        );
 
         builder.dbg_displayChunks();
-
     }
 }
