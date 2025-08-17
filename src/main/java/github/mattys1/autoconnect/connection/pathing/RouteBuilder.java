@@ -12,10 +12,12 @@ import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.ChunkPos;
 import net.minecraft.util.math.Vec3i;
 import net.minecraft.world.World;
+import org.jgrapht.alg.util.NeighborCache;
 import org.jheaps.annotations.VisibleForTesting;
 import org.lwjgl.opengl.GL11;
 
 import java.util.*;
+import java.util.stream.Collectors;
 
 class Node {
     private int g;
@@ -150,6 +152,7 @@ class Cluster {
             return;
         }
 
+        //TODO: perform some sort of refinement to avoid wild path direction changes near portals
         putPortal(adjacentDirection, validPositions.getFirst());
         adjacent.putPortal(adjacentDirection.getOpposite(), validPositions.getFirst().add(diffWithAdjacent));
     }
@@ -273,6 +276,19 @@ class Cluster {
         return new Cluster(pos);
     }
 
+    public void removePortalsWith(Cluster other) {
+        assert this.isAdjacent(other) : String.format("Attempting to remove portals with non-adjacent cluster, this: %s, other %s", this, other);
+
+        final EnumFacing direction = getAdjacentDirection(other);
+        portalPositions.get(direction).forEach(pos -> {
+            final var node = nodeByPosition.get(pos.toLong());
+            node.traversedInSides.clear();
+            node.validCandidateInSides.clear();
+        });
+
+        portalPositions.remove(direction);
+    }
+
     public static Cluster fromChunkCoordinates(final int x, final int y, final int z) {
         return new Cluster(new Vec3i(x, y, z));
     }
@@ -282,22 +298,6 @@ class Cluster {
                 new BlockPos(pos.getX() << 4, pos.getY() << 4, pos.getZ() << 4),
                 new BlockPos((pos.getX() << 4) + 15, (pos.getY() << 4) + 15, (pos.getZ() << 4) + 15)
         );
-    }
-
-    public long toLong() {
-        final int X_BITS = 28;
-        final int Y_BITS = 8;
-        final int Z_BITS = 28;
-
-        final int Z_SHIFT = 0;
-        final int Y_SHIFT = Z_SHIFT + Z_BITS;
-        final int X_SHIFT = Y_SHIFT + Y_BITS;
-
-        final long X_MASK = (1L << X_BITS) - 1L;
-        final long Y_MASK = (1L << Y_BITS) - 1L;
-        final long Z_MASK = (1L << Z_BITS) - 1L;
-
-        return ((long)this.pos.getX() & X_MASK) << X_SHIFT | ((long)this.pos.getY() & Y_MASK) << Y_SHIFT | ((long) this.pos.getZ() & Z_MASK);
     }
 
     @Override
@@ -322,13 +322,37 @@ class Cluster {
 public class RouteBuilder {
     private final BlockPosVertex start;
     private BlockPosVertex end;
-    private final HashSet<Cluster> clusters = new HashSet<>();
+    private final Set<Cluster> clusters = new HashSet<>();
 
     public RouteBuilder(final BlockPos startPos) {
         start = new BlockPosVertex(startPos);
         end = new BlockPosVertex(startPos);
 
 //        addPositionsToRoute(List.of(start.pos));
+    }
+
+    private List<Cluster> getNeighboursOf(final Cluster cluster) {
+        final List<Vec3i> neighbourVectors = List.of(
+                new Vec3i(1, 0, 0),
+                new Vec3i(0, 0, 1),
+                new Vec3i(-1, 0, 0),
+                new Vec3i(0, 0, -1),
+                new Vec3i(0, 1, 0),
+                new Vec3i(0, -1, 0)
+        );
+
+        final List<Cluster> neighbours = new ArrayList<>();
+        for(final var neighbourOffset : neighbourVectors) {
+            final Vec3i neighbourPos = new Vec3i(
+                    cluster.pos.getX() + neighbourOffset.getX(),
+                    cluster.pos.getY() + neighbourOffset.getY(),
+                    cluster.pos.getZ() + neighbourOffset.getZ()
+            );
+
+            clusters.stream().filter(c -> c.pos.equals(neighbourPos)).findAny().ifPresent(neighbours::add); // FIXME: dumb
+        }
+
+        return neighbours;
     }
 
     // start with chunks in the bounding box between start and end
@@ -350,8 +374,7 @@ public class RouteBuilder {
                 Math.max(startCluster.pos.getY(), endCluster.pos.getY()),
                 Math.max(startCluster.pos.getZ(), endCluster.pos.getZ())
         );
-//
-//
+
         for(var x = mins.getX(); x <= maxes.getX(); x++) {
             for(var y = mins.getY(); y <= maxes.getY(); y++) {
                 for(var z = mins.getZ(); z <= maxes.getZ(); z++) {
@@ -365,10 +388,22 @@ public class RouteBuilder {
             }
         }
 
-        // could maybe remove them smarter instead of everything outside the bounding box.
-        clusters.removeIf(c -> c.pos.getX() < mins.getX() || c.pos.getX() > maxes.getX()
+        final Set<Cluster> outside = clusters.stream().filter(c -> c.pos.getX() < mins.getX() || c.pos.getX() > maxes.getX()
                 || c.pos.getY() < mins.getY() || c.pos.getY() > maxes.getY()
-                || c.pos.getZ() < mins.getZ() || c.pos.getZ() > maxes.getZ());
+                || c.pos.getZ() < mins.getZ() || c.pos.getZ() > maxes.getZ()).collect(Collectors.toSet());
+
+        for(final var c : outside) {
+            getNeighboursOf(c).forEach( neigbhour -> {
+                        if(outside.contains(neigbhour)) {
+                            return;
+                        }
+
+                        neigbhour.removePortalsWith(c);
+                    }
+            );
+        }
+
+        clusters.removeAll(outside);
     }
 
     // this should check only new and edge clusters
@@ -380,8 +415,6 @@ public class RouteBuilder {
                 }
 
                 cluster.definePortals(cluster1);
-
-
             }
         }
     };
