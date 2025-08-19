@@ -3,6 +3,7 @@ package github.mattys1.autoconnect.connection.pathing;
 import github.mattys1.autoconnect.Log;
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import it.unimi.dsi.fastutil.objects.Object2ObjectArrayMap;
+import jakarta.annotation.Priority;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.GlStateManager;
 import net.minecraft.client.renderer.RenderGlobal;
@@ -17,11 +18,15 @@ import org.jheaps.annotations.VisibleForTesting;
 import org.lwjgl.opengl.GL11;
 
 import java.util.*;
+import java.util.function.BiFunction;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 class Node {
-    private int g;
-    private int f;
+    public int g = 0;
+    public int f;
+    public int h;
+    public BlockPos parent = null;
     public Set<EnumFacing> validCandidateInSides = new HashSet<>();
     public Set<EnumFacing> traversedInSides = new HashSet<>();
 }
@@ -54,6 +59,83 @@ class Cluster {
                 }
             }
         }
+    }
+
+    @VisibleForTesting
+    public List<BlockPos> findPath(final BlockPos start, final BlockPos goal) {
+        final BiFunction<BlockPos, BlockPos, Integer> heuristic =
+                (a, b) -> Math.abs(a.getX() - b.getX())
+                        + Math.abs(a.getY() - b.getY())
+                        + Math.abs(a.getZ() - b.getZ());
+
+        final Function<BlockPos, List<BlockPos>> reconstructPath = (BlockPos currentPos) -> {
+            final List<BlockPos> path = new ArrayList<>();
+
+            while(currentPos != null) {
+                path.add(currentPos);
+                currentPos = nodeByPosition.get(currentPos.toLong()).parent;
+            }
+
+            return path;
+        };
+
+//        assert portalPositions.values().stream()
+//                .map(
+//                        set -> set.contains(start) || set.contains(goal)
+//                ).filter(val -> val == true).count() >= 2
+//                : "Portal positions don't contain start or end, or attempting to path between portals on the same side";
+
+        PriorityQueue<BlockPos> open = new PriorityQueue<>(
+                Comparator
+                        .comparingInt((BlockPos p) -> {
+                            Node n = nodeByPosition.get(p.toLong());
+                            return n.f;
+                        })
+                        .thenComparingInt(p -> {
+                            Node n = nodeByPosition.get(p.toLong());
+                            return n.h;
+                        })
+        );
+        final Queue<BlockPos> closed = new ArrayDeque<>();
+
+        final Node startNode = nodeByPosition.get(start.toLong());
+        startNode.h = heuristic.apply(start, goal);
+        startNode.f = startNode.g + startNode.h;
+
+        open.add(start);
+
+        while(!open.isEmpty()) {
+            final BlockPos currentPos = open.poll();
+            final Node current = nodeByPosition.get(currentPos.toLong());
+            if(currentPos.equals(goal)) {
+                return reconstructPath.apply(currentPos);
+            }
+
+            closed.add(currentPos);
+
+            for(final var neighbourPos : getNeighboursOf(currentPos)) {
+                if(closed.contains(neighbourPos)) {
+                    continue;
+                }
+
+                final Node neighbour = nodeByPosition.get(neighbourPos.toLong());
+                final int candidateG = current.g + heuristic.apply(currentPos, neighbourPos);
+
+                if(!open.contains(neighbourPos)) {
+                    open.add(neighbourPos);
+                } else if(candidateG >= neighbour.g) {
+                    continue;
+                }
+
+                neighbour.parent = currentPos;
+                neighbour.g = candidateG;
+                neighbour.h = heuristic.apply(neighbourPos, goal);
+                neighbour.f = neighbour.g + neighbour.f;
+            }
+        }
+
+        // TODO: differentiate between empty path and no path
+        return Collections.emptyList();
     }
 
     private Vec3i positionDifference(Cluster other) {
@@ -289,6 +371,32 @@ class Cluster {
         portalPositions.remove(direction);
     }
 
+    private List<BlockPos> getNeighboursOf(final BlockPos pos) {
+        final List<Vec3i> neighbourVectors = List.of(
+                new Vec3i(1, 0, 0),
+                new Vec3i(0, 0, 1),
+                new Vec3i(-1, 0, 0),
+                new Vec3i(0, 0, -1),
+                new Vec3i(0, 1, 0),
+                new Vec3i(0, -1, 0)
+        );
+
+        final List<BlockPos> neighbours = new ArrayList<>();
+        for(final var neighbourOffset : neighbourVectors) {
+            final BlockPos neighbourPos = new BlockPos(
+                    pos.getX() + neighbourOffset.getX(),
+                    pos.getY() + neighbourOffset.getY(),
+                    pos.getZ() + neighbourOffset.getZ()
+            );
+
+            if(nodeByPosition.get(neighbourPos.toLong()) != null) {
+                neighbours.add(neighbourPos);
+            }
+        }
+
+        return neighbours;
+    }
+
     public static Cluster fromChunkCoordinates(final int x, final int y, final int z) {
         return new Cluster(new Vec3i(x, y, z));
     }
@@ -320,13 +428,13 @@ class Cluster {
 }
 
 public class RouteBuilder {
-    private final BlockPosVertex start;
-    private BlockPosVertex end;
+    private final BlockPos start;
+    private BlockPos end;
     private final Set<Cluster> clusters = new HashSet<>();
 
     public RouteBuilder(final BlockPos startPos) {
-        start = new BlockPosVertex(startPos);
-        end = new BlockPosVertex(startPos);
+        start = startPos;
+        end = startPos;
 
 //        addPositionsToRoute(List.of(start.pos));
     }
@@ -357,8 +465,8 @@ public class RouteBuilder {
 
     // start with chunks in the bounding box between start and end
     private void setChunksBetweenStartAndGoal() {
-        final Cluster startCluster = Cluster.fromBlockCoordinates(start.pos.getX(), start.pos.getY(), start.pos.getZ());
-        final Cluster endCluster = Cluster.fromBlockCoordinates(end.pos.getX(), end.pos.getY(), end.pos.getZ());
+        final Cluster startCluster = Cluster.fromBlockCoordinates(start.getX(), start.getY(), start.getZ());
+        final Cluster endCluster = Cluster.fromBlockCoordinates(end.getX(), end.getY(), end.getZ());
 
         clusters.add(startCluster);
         clusters.add(endCluster);
@@ -420,11 +528,11 @@ public class RouteBuilder {
     };
 
     public void setGoal(BlockPos end) {
-        final BlockPosVertex goal = new BlockPosVertex(end);
+        final BlockPos goal = end;
 //        assert vertexByPos.containsValue(goal) : String.format("Attempting to make a nonexistent vertex the goal, vertex set: %s, goal: %s",
 //                vertexByPos.values().stream().map(v -> v.pos).toList(), goal.pos);
         final boolean hasGoalChangedChunk = Cluster.fromBlockCoordinates(end.getX(), end.getY(), end.getZ()).pos.equals(
-               Cluster.fromBlockCoordinates(goal.pos.getX(), goal.pos.getY(), goal.pos.getZ()).pos
+               Cluster.fromBlockCoordinates(goal.getX(), goal.getY(), goal.getZ()).pos
         ); // dumb
 
         final var oldGoal = this.end;
@@ -462,6 +570,12 @@ public class RouteBuilder {
 //                }).getPath(start, end);
 //
 //        return path != null ? path.getVertexList().stream().map(v -> v.pos).toList() : Collections.emptyList();
+        if(clusters.size() == 1) {
+            for(final var c : clusters) {
+                return c.findPath(start, end);
+            }
+        }
+
         return Collections.emptyList();
     }
 

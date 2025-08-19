@@ -60,38 +60,6 @@ public class Connection {
         );
     }
 
-    private List<BlockPos> getEmptySpaceAroundBoundingBox(final AxisAlignedBB boundingBox) {
-        assert startPos != null && endPos != null : "Attempted to get space without defining connection first";
-
-        final World world = Minecraft.getMinecraft().world;
-
-        assert boundingBox.minX <= boundingBox.maxX &&
-                boundingBox.minY <= boundingBox.maxY &&
-                boundingBox.minZ <= boundingBox.maxZ
-                : String.format("Invalid bounding box: min(%.1f,%.1f,%.1f), max(%.1f,%.1f,%.1f)",
-                boundingBox.minX, boundingBox.minY, boundingBox.minZ,
-                boundingBox.maxX, boundingBox.maxY, boundingBox.maxZ);
-
-        final List<BlockPos> placeablePositions = new ArrayList<>();
-        for(int x = (int) boundingBox.minX; x <= boundingBox.maxX; x++) {
-            for(int y = (int) boundingBox.minY; y <= boundingBox.maxY; y++) {
-                for(int z = (int) boundingBox.minZ; z <= boundingBox.maxZ; z++) {
-                    final BlockPos pos = new BlockPos(x, y, z);
-
-                    if(world.isAirBlock(pos)) {
-                        placeablePositions.add(pos);
-                    }
-                }
-            }
-        }
-
-        assert new HashSet<>(placeablePositions).stream().sorted().toList().equals(
-            placeablePositions.stream().sorted().toList()
-        ) : "space around box contains duplicates";
-
-        return placeablePositions;
-    }
-
     public void confirmConnection() {
         assert startPos != null && endPos != null : "Attempted to confirm connection, but the start vectors were not set";
 
@@ -126,7 +94,7 @@ public class Connection {
     public void updateEndPos(final ConnectionPosition end) {
         assert startPos != null : "Attempted to update connection end without defined start";
 
-        builder.setGoal(end.coordinates());
+        builder.setGoal(end.getAdjacentOfFace());
         builder.processPortals();
 
         endPos = end;
@@ -145,7 +113,7 @@ public class Connection {
 //        builder.setGoal(end.getAdjacentOfFace());
 //
 //        start = System.nanoTime();
-//        currentPath = builder.getRoute();
+        currentPath = builder.getRoute();
 //        endTime = System.nanoTime();
 //        Log.info("Got route in {}ms, with {} blocks", abs(start - endTime) / 1_000_000., placeables.size());
 
