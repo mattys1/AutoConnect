@@ -1,440 +1,28 @@
 package github.mattys1.autoconnect.connection.pathing;
 
 import github.mattys1.autoconnect.Log;
-import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
-import it.unimi.dsi.fastutil.objects.Object2ObjectArrayMap;
-import jakarta.annotation.Priority;
-import net.minecraft.client.Minecraft;
-import net.minecraft.client.renderer.GlStateManager;
 import net.minecraft.client.renderer.RenderGlobal;
-import net.minecraft.util.EnumFacing;
 import net.minecraft.util.math.AxisAlignedBB;
 import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.ChunkPos;
 import net.minecraft.util.math.Vec3i;
-import net.minecraft.world.World;
-import org.jgrapht.alg.util.NeighborCache;
-import org.jheaps.annotations.VisibleForTesting;
-import org.lwjgl.opengl.GL11;
+import org.jgrapht.alg.shortestpath.AStarShortestPath;
+import org.jgrapht.alg.shortestpath.DijkstraShortestPath;
+import org.jgrapht.graph.DefaultWeightedEdge;
+import org.jgrapht.graph.SimpleWeightedGraph;
 
 import java.util.*;
-import java.util.function.BiFunction;
-import java.util.function.Function;
 import java.util.stream.Collectors;
-
-class Node {
-    public int g = 0;
-    public int f;
-    public int h;
-    public BlockPos parent = null;
-    public Set<EnumFacing> validCandidateInSides = new HashSet<>();
-    public Set<EnumFacing> traversedInSides = new HashSet<>();
-}
-
-class Cluster {
-    public final Vec3i pos;
-    private final Long2ObjectOpenHashMap<Node> nodeByPosition = new Long2ObjectOpenHashMap<>();
-    Object2ObjectArrayMap<EnumFacing, HashSet<BlockPos>> portalPositions = new Object2ObjectArrayMap<>();
-
-    private void definePlaceablesInChunk() {
-        final AxisAlignedBB boundingBox = getChunkBounds();
-        final World world = Minecraft.getMinecraft().world;
-
-        assert boundingBox.minX <= boundingBox.maxX &&
-                boundingBox.minY <= boundingBox.maxY &&
-                boundingBox.minZ <= boundingBox.maxZ
-                : String.format("Invalid bounding box: min(%.1f,%.1f,%.1f), max(%.1f,%.1f,%.1f)",
-                boundingBox.minX, boundingBox.minY, boundingBox.minZ,
-                boundingBox.maxX, boundingBox.maxY, boundingBox.maxZ);
-
-        for(int x = (int) boundingBox.minX; x <= boundingBox.maxX; x++) {
-            for(int y = (int) boundingBox.minY; y <= boundingBox.maxY; y++) {
-                for(int z = (int) boundingBox.minZ; z <= boundingBox.maxZ; z++) {
-                    final BlockPos pos = new BlockPos(x, y, z);
-
-                    if(world.isAirBlock(pos)) {
-                        assert world.isValid(pos) : "Attempting to put invalid block pos into chunk";
-                        nodeByPosition.put(pos.toLong(), new Node());
-                    }
-                }
-            }
-        }
-    }
-
-    @VisibleForTesting
-    public List<BlockPos> findPath(final BlockPos start, final BlockPos goal) {
-        final BiFunction<BlockPos, BlockPos, Integer> heuristic =
-                (a, b) -> Math.abs(a.getX() - b.getX())
-                        + Math.abs(a.getY() - b.getY())
-                        + Math.abs(a.getZ() - b.getZ());
-
-        final Function<BlockPos, List<BlockPos>> reconstructPath = (BlockPos currentPos) -> {
-            final List<BlockPos> path = new ArrayList<>();
-
-            while(currentPos != null) {
-                path.add(currentPos);
-                currentPos = nodeByPosition.get(currentPos.toLong()).parent;
-            }
-
-            return path;
-        };
-
-//        assert portalPositions.values().stream()
-//                .map(
-//                        set -> set.contains(start) || set.contains(goal)
-//                ).filter(val -> val == true).count() >= 2
-//                : "Portal positions don't contain start or end, or attempting to path between portals on the same side";
-
-        PriorityQueue<BlockPos> open = new PriorityQueue<>(
-                Comparator
-                        .comparingInt((BlockPos p) -> {
-                            Node n = nodeByPosition.get(p.toLong());
-                            return n.f;
-                        })
-                        .thenComparingInt(p -> {
-                            Node n = nodeByPosition.get(p.toLong());
-                            return n.h;
-                        })
-        );
-        final Queue<BlockPos> closed = new ArrayDeque<>();
-
-        final Node startNode = nodeByPosition.get(start.toLong());
-        startNode.h = heuristic.apply(start, goal);
-        startNode.f = startNode.g + startNode.h;
-
-        open.add(start);
-
-        while(!open.isEmpty()) {
-            final BlockPos currentPos = open.poll();
-            final Node current = nodeByPosition.get(currentPos.toLong());
-            if(currentPos.equals(goal)) {
-                return reconstructPath.apply(currentPos);
-            }
-
-            closed.add(currentPos);
-
-            for(final var neighbourPos : getNeighboursOf(currentPos)) {
-                if(closed.contains(neighbourPos)) {
-                    continue;
-                }
-
-                final Node neighbour = nodeByPosition.get(neighbourPos.toLong());
-                final int candidateG = current.g + heuristic.apply(currentPos, neighbourPos);
-
-                if(!open.contains(neighbourPos)) {
-                    open.add(neighbourPos);
-                } else if(candidateG >= neighbour.g) {
-                    continue;
-                }
-
-                neighbour.parent = currentPos;
-                neighbour.g = candidateG;
-                neighbour.h = heuristic.apply(neighbourPos, goal);
-                neighbour.f = neighbour.g + neighbour.f;
-            }
-        }
-
-        // TODO: differentiate between empty path and no path
-        return Collections.emptyList();
-    }
-
-    private Vec3i positionDifference(Cluster other) {
-        int dx = other.pos.getX() - this.pos.getX();
-        int dy = other.pos.getY() - this.pos.getY();
-        int dz = other.pos.getZ() - this.pos.getZ();
-
-        return new Vec3i(dx, dy, dz);
-    }
-
-    // TODO: actually use inbuilt functions in the enum
-    private AxisAlignedBB getEdge(EnumFacing direction) {
-        AxisAlignedBB b = getChunkBounds();
-        return switch (direction) {
-            case UP -> new AxisAlignedBB(b.minX, b.maxY, b.minZ, b.maxX, b.maxY, b.maxZ);
-            case DOWN -> new AxisAlignedBB(b.minX, b.minY, b.minZ, b.maxX, b.minY, b.maxZ);
-            case NORTH -> new AxisAlignedBB(b.minX, b.minY, b.minZ, b.maxX, b.maxY, b.minZ);
-            case SOUTH -> new AxisAlignedBB(b.minX, b.minY, b.maxZ, b.maxX, b.maxY, b.maxZ);
-            case EAST -> new AxisAlignedBB(b.maxX, b.minY, b.minZ, b.maxX, b.maxY, b.maxZ);
-            case WEST -> new AxisAlignedBB(b.minX, b.minY, b.minZ, b.minX, b.maxY, b.maxZ);
-        };
-    }
-
-    private void putPortal(EnumFacing adjacentDirection, BlockPos portalPos) {
-        if(portalPositions.containsKey(adjacentDirection)) {
-            portalPositions.get(adjacentDirection).add(portalPos);
-        } else {
-            portalPositions.put(adjacentDirection, new HashSet<>(Collections.singleton(portalPos)));
-        }
-    }
-
-    // TODO: handle portals for adjacent
-    private void fillPortal(BlockPos nodePos, Cluster adjacent, EnumFacing adjacentDirection) {
-        final var startNode = nodeByPosition.get(nodePos.toLong());
-        assert startNode != null;
-        if(startNode.traversedInSides.contains(adjacentDirection)) return;
-
-        final List<BlockPos> validPositions = new ArrayList<>(); // for postprocessing down the line
-        final Stack<BlockPos> nodePositions = new Stack<>();
-        nodePositions.add(nodePos);
-        final Vec3i diffWithAdjacent = positionDifference(adjacent);
-
-        List<Vec3i> neighbourNodeOffsets = switch (adjacentDirection) {
-            case UP, DOWN -> List.of(
-                    new Vec3i(1, 0, 0),
-                    new Vec3i(0, 0, 1),
-                    new Vec3i(-1, 0, 0),
-                    new Vec3i(0, 0, -1)
-            );
-            case NORTH, SOUTH -> List.of(
-                    new Vec3i(1, 0, 0),
-                    new Vec3i(0, 1, 0),
-                    new Vec3i(-1, 0, 0),
-                    new Vec3i(0, -1, 0)
-            );
-            case EAST, WEST -> List.of(
-                    new Vec3i(0, 1, 0),
-                    new Vec3i(0, 0, 1),
-                    new Vec3i(0, -1, 0),
-                    new Vec3i(0, 0, -1)
-            );
-        };
-
-        while(!nodePositions.empty()) {
-            var pos = nodePositions.pop();
-            final Node n = nodeByPosition.get(pos.toLong());
-            assert n != null;
-
-            if(n.traversedInSides.contains(adjacentDirection)) {
-                continue;
-            }
-            n.traversedInSides.add(adjacentDirection);
-
-            final Node adjacentCandidate = adjacent.nodeByPosition.get(pos.add(diffWithAdjacent).toLong());
-            if(adjacentCandidate == null) {
-                continue;
-            }
-
-            adjacentCandidate.traversedInSides.add(adjacentDirection.getOpposite());
-            adjacentCandidate.validCandidateInSides.add(adjacentDirection.getOpposite());
-
-            n.validCandidateInSides.add(adjacentDirection);
-            validPositions.add(pos);
-
-            for(final var offset : neighbourNodeOffsets) {
-                final BlockPos neighbourPos = pos.add(offset);
-                if(nodeByPosition.get(neighbourPos.toLong()) == null) {
-                    continue;
-                }
-
-                nodePositions.add(neighbourPos);
-            }
-        }
-
-        if(validPositions.isEmpty()) {
-            return;
-        }
-
-        //TODO: perform some sort of refinement to avoid wild path direction changes near portals
-        putPortal(adjacentDirection, validPositions.getFirst());
-        adjacent.putPortal(adjacentDirection.getOpposite(), validPositions.getFirst().add(diffWithAdjacent));
-    }
-
-    // TODO: actually use inbuilt functions in the enum
-    private EnumFacing getAdjacentDirection(Cluster adjacent) {
-        final var diff = positionDifference(adjacent);
-
-        if(diff.getX() == 1 && diff.getY() == 0 && diff.getZ() == 0) return EnumFacing.EAST;
-        if(diff.getX() == -1 && diff.getY() == 0 && diff.getZ() == 0) return EnumFacing.WEST;
-        if(diff.getX() == 0 && diff.getY() == 1 && diff.getZ() == 0) return EnumFacing.UP;
-        if(diff.getX() == 0 && diff.getY() == -1 && diff.getZ() == 0) return EnumFacing.DOWN;
-        if(diff.getX() == 0 && diff.getY() == 0 && diff.getZ() == 1) return EnumFacing.SOUTH;
-        if(diff.getX() == 0 && diff.getY() == 0 && diff.getZ() == -1) return EnumFacing.NORTH;
-
-        throw new IllegalArgumentException("Clusters aren't adjacent");
-    }
-
-    public boolean isAdjacent(Cluster other) {
-        Vec3i diff = positionDifference(other);
-        int dx = Math.abs(diff.getX());
-        int dy = Math.abs(diff.getY());
-        int dz = Math.abs(diff.getZ());
-        return (dx + dy + dz) == 1;
-    }
-
-    public void definePortals(Cluster adjacent) {
-        final var adjacentDiurection = getAdjacentDirection(adjacent);
-        final var edge = getEdge(adjacentDiurection);
-
-        for(int x = (int) edge.minX; x <= edge.maxX; x++) {
-            for(int y = (int) edge.minY; y <= edge.maxY; y++) {
-                for(int z = (int) edge.minZ; z <= edge.maxZ; z++) {
-                    final BlockPos pos = new BlockPos(x, y, z);
-                    if(!nodeByPosition.containsKey(pos.toLong())) {
-                        continue;
-                    }
-
-                    fillPortal(pos, adjacent, adjacentDiurection);
-                }
-            }
-        }
-
-        Log.info("Portals in cluster, {}", portalPositions);
-    }
-
-    @VisibleForTesting
-    public void dbg_renderPortals() {
-        if (portalPositions.isEmpty()) return;
-
-        GlStateManager.pushMatrix();
-        // Save relevant state
-        GL11.glPushAttrib(GL11.GL_ENABLE_BIT | GL11.GL_COLOR_BUFFER_BIT | GL11.GL_DEPTH_BUFFER_BIT);
-
-        GlStateManager.disableTexture2D();
-        GlStateManager.disableLighting();
-        GlStateManager.enableBlend();
-        GlStateManager.tryBlendFuncSeparate(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA, 1, 0);
-
-        // Avoid z-fighting with wireframe lines
-        GL11.glEnable(GL11.GL_POLYGON_OFFSET_FILL);
-        GL11.glPolygonOffset(1f, 1f);
-        GlStateManager.depthMask(false); // do not write depth so lines drawn after stay visible
-
-        final float a = 0.35f;
-        final double eps = 0.002; // shrink to sit just inside the block
-        for (HashSet<BlockPos> positions : portalPositions.values()) {
-            for (BlockPos pos : positions) {
-                AxisAlignedBB bb = new AxisAlignedBB(
-                        pos.getX() + eps, pos.getY() + eps, pos.getZ() + eps,
-                        pos.getX() + 1 - eps, pos.getY() + 1 - eps, pos.getZ() + 1 - eps
-                );
-                RenderGlobal.renderFilledBox(bb, 0.0f, 1.0f, 0.0f, a);
-            }
-        }
-
-        // Restore
-        GlStateManager.depthMask(true);
-        GL11.glDisable(GL11.GL_POLYGON_OFFSET_FILL);
-        GL11.glPopAttrib();
-        GlStateManager.popMatrix();
-    }
-
-    private Cluster(Vec3i vec) {
-        pos = vec;
-
-        assert ((java.util.function.BooleanSupplier) () -> {
-            ChunkPos cp = new ChunkPos(pos.getX(), pos.getZ());
-            AxisAlignedBB bounds = getChunkBounds();
-            boolean ok =
-                    bounds.minX == cp.getXStart() &&
-                            bounds.minZ == cp.getZStart() &&
-                            bounds.maxX == cp.getXEnd() &&
-                            bounds.maxZ == cp.getZEnd();
-            if (!ok) {
-                throw new AssertionError(String.format(
-                        "Invalid chunk bounds, calculated %s, expected %s",
-                        bounds,
-                        new AxisAlignedBB(
-                                cp.getXStart(),
-                                pos.getY() << 4,
-                                cp.getZStart(),
-                                cp.getXEnd(),
-                                (pos.getY() << 4) + 15,
-                                cp.getZEnd()
-                        )
-                ));
-            }
-            return true;
-        }).getAsBoolean();
-
-        definePlaceablesInChunk();
-    }
-
-    public static Cluster fromBlockCoordinates(final int x, final int y, final int z) {
-        final Vec3i pos = new Vec3i(x >> 4, y >> 4, z >> 4);
-        assert pos.getX() == new ChunkPos(new BlockPos(x, y, z)).x
-                && pos.getZ() == new ChunkPos(new BlockPos(x, y, z)).z
-        : String.format("Chunk pos from block incorrect, calculated: %s, actual: %s", pos, new ChunkPos(new BlockPos(x, y, z)));
-
-        return new Cluster(pos);
-    }
-
-    public void removePortalsWith(Cluster other) {
-        assert this.isAdjacent(other) : String.format("Attempting to remove portals with non-adjacent cluster, this: %s, other %s", this, other);
-
-        final EnumFacing direction = getAdjacentDirection(other);
-        portalPositions.get(direction).forEach(pos -> {
-            final var node = nodeByPosition.get(pos.toLong());
-            node.traversedInSides.clear();
-            node.validCandidateInSides.clear();
-        });
-
-        portalPositions.remove(direction);
-    }
-
-    private List<BlockPos> getNeighboursOf(final BlockPos pos) {
-        final List<Vec3i> neighbourVectors = List.of(
-                new Vec3i(1, 0, 0),
-                new Vec3i(0, 0, 1),
-                new Vec3i(-1, 0, 0),
-                new Vec3i(0, 0, -1),
-                new Vec3i(0, 1, 0),
-                new Vec3i(0, -1, 0)
-        );
-
-        final List<BlockPos> neighbours = new ArrayList<>();
-        for(final var neighbourOffset : neighbourVectors) {
-            final BlockPos neighbourPos = new BlockPos(
-                    pos.getX() + neighbourOffset.getX(),
-                    pos.getY() + neighbourOffset.getY(),
-                    pos.getZ() + neighbourOffset.getZ()
-            );
-
-            if(nodeByPosition.get(neighbourPos.toLong()) != null) {
-                neighbours.add(neighbourPos);
-            }
-        }
-
-        return neighbours;
-    }
-
-    public static Cluster fromChunkCoordinates(final int x, final int y, final int z) {
-        return new Cluster(new Vec3i(x, y, z));
-    }
-
-    public AxisAlignedBB getChunkBounds() {
-        return new AxisAlignedBB(
-                new BlockPos(pos.getX() << 4, pos.getY() << 4, pos.getZ() << 4),
-                new BlockPos((pos.getX() << 4) + 15, (pos.getY() << 4) + 15, (pos.getZ() << 4) + 15)
-        );
-    }
-
-    @Override
-    public int hashCode() {
-        return pos.hashCode();
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-        Cluster oCluster = (Cluster) o;
-        return pos.equals(oCluster.pos);
-    }
-
-    @Override
-    public String toString() {
-        return String.format("PathChunk{pos=%s}", pos);
-    }
-}
 
 public class RouteBuilder {
     private final BlockPos start;
-    private BlockPos end;
+    private BlockPos end = null;
+    private BlockPos oldEnd = null; // hack?
     private final Set<Cluster> clusters = new HashSet<>();
+    private final SimpleWeightedGraph<Portal, DefaultWeightedEdge> portalGraph = new SimpleWeightedGraph<>(DefaultWeightedEdge.class);
 
     public RouteBuilder(final BlockPos startPos) {
         start = startPos;
-        end = startPos;
+//        end = startPos;
 
 //        addPositionsToRoute(List.of(start.pos));
     }
@@ -514,8 +102,12 @@ public class RouteBuilder {
         clusters.removeAll(outside);
     }
 
-    // this should check only new and edge clusters
+    // this should check only new and edge clusters in the future
     public void processPortals() {
+        if(!hasGoalChangedChunk()) {
+            return;
+        }
+
         for(final Cluster cluster : clusters) {
             for(final Cluster cluster1 : clusters) {
                 if(!cluster.isAdjacent(cluster1)) {
@@ -527,18 +119,19 @@ public class RouteBuilder {
         }
     };
 
-    public void setGoal(BlockPos end) {
-        final BlockPos goal = end;
+    final boolean hasGoalChangedChunk() {
+        return oldEnd == null || !Cluster.fromBlockCoordinates(end.getX(), end.getY(), end.getZ()).pos.equals(
+                Cluster.fromBlockCoordinates(oldEnd.getX(), oldEnd.getY(), oldEnd.getZ()).pos
+        ); // dumb
+    }
+
+    public void setGoal(final BlockPos end) {
+        oldEnd = this.end;
 //        assert vertexByPos.containsValue(goal) : String.format("Attempting to make a nonexistent vertex the goal, vertex set: %s, goal: %s",
 //                vertexByPos.values().stream().map(v -> v.pos).toList(), goal.pos);
-        final boolean hasGoalChangedChunk = Cluster.fromBlockCoordinates(end.getX(), end.getY(), end.getZ()).pos.equals(
-               Cluster.fromBlockCoordinates(goal.getX(), goal.getY(), goal.getZ()).pos
-        ); // dumb
+        this.end = end;
 
-        final var oldGoal = this.end;
-        this.end = goal;
-
-        if(hasGoalChangedChunk) {
+        if(hasGoalChangedChunk()) {
             setChunksBetweenStartAndGoal();
             Log.info("Chunks between start and goal: {}", clusters);
         }
@@ -559,24 +152,43 @@ public class RouteBuilder {
     }
 
     public List<BlockPos> getRoute() {
-//    final var path = new AStarShortestPath<>(
-//                placeableGraph,
-//                (v1, v2) -> {
-//                    BlockPos pos1 = v1.pos;
-//                    BlockPos pos2 = v2.pos;
-//                    return Math.abs(pos1.getX() - pos2.getX()) +
-//                            Math.abs(pos1.getY() - pos2.getY()) +
-//                            Math.abs(pos1.getZ() - pos2.getZ());
-//                }).getPath(start, end);
-//
-//        return path != null ? path.getVertexList().stream().map(v -> v.pos).toList() : Collections.emptyList();
-        if(clusters.size() == 1) {
-            for(final var c : clusters) {
-                return c.findPath(start, end);
+        if(hasGoalChangedChunk()) {
+            for(final var cluster : clusters) {
+                cluster.addPathsBeetwenPortals(portalGraph);
+                cluster.setRouteBetweenBlockAndPortals(start, portalGraph);
             }
         }
 
-        return Collections.emptyList();
+        Log.info("Portal graph: {}", portalGraph.vertexSet());
+
+        if(clusters.size() <= 1) {
+//            return clusters.stream().findFirst().get().findPath(start, end);
+            return Collections.emptyList();
+        }
+
+        clusters.forEach(c -> c.setRouteBetweenBlockAndPortals(end, portalGraph));
+
+        final Cluster startCluster = Cluster.fromBlockCoordinates(start.getX(), start.getY(), start.getZ());
+        final Cluster endCluster = Cluster.fromBlockCoordinates(end.getX(), end.getY(), end.getZ());
+
+        final var path = new DijkstraShortestPath<>(portalGraph).getPath(
+                new Portal(startCluster, startCluster, start, start),
+                new Portal(endCluster, endCluster, end, end)
+        );
+        assert path.getVertexList().size() != 1 : "Path shouldn't go through only one portal, path: " + path.getVertexList();
+
+        ArrayList<BlockPos> fullPath = new ArrayList<>();
+        for(int i = 1; i < path.getVertexList().size(); i++) {
+            final Portal entry = path.getVertexList().get(i - 1);
+            final Portal exit = path.getVertexList().get(i);
+
+            fullPath.addAll(entry.getConnectingRoute(exit).orElseThrow());
+        }
+
+//        return path != null ? path.getVertexList().stream().flatMap() : Collections.emptyList();
+        return fullPath;
+
+//        return Collections.emptyList();
     }
 
 }
