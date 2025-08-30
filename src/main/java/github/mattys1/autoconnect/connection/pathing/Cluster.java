@@ -104,8 +104,15 @@ class Cluster {
         return Optional.ofNullable(routeBeetweenPortals.get(new UnorderedPair<>(start, goal)));
     }
 
-    private List<BlockPos> findPath(final BlockPos start, final BlockPos goal) {
+    public List<BlockPos> findPath(final BlockPos start, final BlockPos goal) {
         assert nodeByPosition.get(start.toLong()) != null && nodeByPosition.get(goal.toLong()) != null : "Cluster doesnt contain start or goal";
+
+        for(Node node : nodeByPosition.values()) {
+            node.g = 1_000_000_000;
+            node.f = 0;
+            node.h = 0;
+            node.parent = null;
+        }
 
         final BiFunction<BlockPos, BlockPos, Integer> heuristic =
                 (a, b) -> Math.abs(a.getX() - b.getX())
@@ -114,8 +121,9 @@ class Cluster {
 
         final Function<BlockPos, List<BlockPos>> reconstructPath = (BlockPos currentPos) -> {
             final List<BlockPos> path = new ArrayList<>();
+            path.add(start);
 
-            while (currentPos != null && !currentPos.equals(start) /*hack*/) {
+            while(currentPos != null && !currentPos.equals(start) /*&& !start.equals(nodeByPosition.get(currentPos.toLong()).parent) */) {
                 assert !path.contains(currentPos) : String.format("Path cycle detected, %s %n start: %s, goal %s", path, start, goal);
                 path.add(currentPos);
                 currentPos = nodeByPosition.get(currentPos.toLong()).parent;
@@ -124,13 +132,7 @@ class Cluster {
             return path;
         };
 
-//        assert portalPositions.values().stream()
-//                .map(
-//                        set -> set.contains(start) || set.contains(goal)
-//                ).filter(val -> val == true).count() >= 2
-//                : "Portal positions don't contain start or end, or attempting to path between portals on the same side";
-
-        PriorityQueue<BlockPos> open = new PriorityQueue<>(
+        PriorityQueue<BlockPos> openQueue = new PriorityQueue<>(
                 Comparator
                         .comparingInt((BlockPos p) -> {
                             Node n = nodeByPosition.get(p.toLong());
@@ -141,45 +143,55 @@ class Cluster {
                             return n.h;
                         })
         );
-        final Queue<BlockPos> closed = new ArrayDeque<>();
+        Set<BlockPos> openSet = new HashSet<>();
+        Set<BlockPos> closedSet = new HashSet<>();
 
         final Node startNode = nodeByPosition.get(start.toLong());
+        startNode.g = 0;
         startNode.h = heuristic.apply(start, goal);
         startNode.f = startNode.g + startNode.h;
 
-        open.add(start);
+        openQueue.add(start);
+        openSet.add(start);
 
-        while (!open.isEmpty()) {
-            final BlockPos currentPos = open.poll();
-            final Node current = nodeByPosition.get(currentPos.toLong());
+        while(!openQueue.isEmpty()) {
+            final BlockPos currentPos = openQueue.poll();
+            openSet.remove(currentPos);
+
             if (currentPos.equals(goal)) {
                 return reconstructPath.apply(currentPos);
             }
 
-            closed.add(currentPos);
+            closedSet.add(currentPos);
+            final Node current = nodeByPosition.get(currentPos.toLong());
 
-            for (final var neighbourPos : getNeighboursOf(currentPos)) {
-                if (closed.contains(neighbourPos)) {
+            for(final BlockPos neighbourPos : getNeighboursOf(currentPos)) {
+                if (closedSet.contains(neighbourPos)) {
                     continue;
                 }
 
                 final Node neighbour = nodeByPosition.get(neighbourPos.toLong());
                 final int candidateG = current.g + heuristic.apply(currentPos, neighbourPos);
 
-                if (!open.contains(neighbourPos)) {
-                    open.add(neighbourPos);
-                } else if (candidateG >= neighbour.g) {
-                    continue;
-                }
+                if (!openSet.contains(neighbourPos)) {
+                    neighbour.parent = currentPos;
+                    neighbour.g = candidateG;
+                    neighbour.h = heuristic.apply(neighbourPos, goal);
+                    neighbour.f = neighbour.g + neighbour.h;
 
-                neighbour.parent = currentPos;
-                neighbour.g = candidateG;
-                neighbour.h = heuristic.apply(neighbourPos, goal);
-                neighbour.f = neighbour.g + neighbour.h;
+                    openQueue.add(neighbourPos);
+                    openSet.add(neighbourPos);
+                } else if(candidateG < neighbour.g) {
+                    neighbour.parent = currentPos;
+                    neighbour.g = candidateG;
+                    neighbour.f = candidateG + neighbour.h;
+
+                    openQueue.remove(neighbourPos);
+                    openQueue.add(neighbourPos);
+                }
             }
         }
 
-        // TODO: differentiate between empty path and no path
         return Collections.emptyList();
     }
 
@@ -372,6 +384,10 @@ class Cluster {
 
                 portalGraph.addVertex(startPortal);
                 portalGraph.addVertex(goalPortal);
+                if(startPortal.equals(goalPortal)) {
+                    continue;
+                }
+
                 final var edge = portalGraph.addEdge(startPortal, goalPortal);
                 if(edge == null) {
                     Log.warn("Edge between {} and {} is null", startPortal, goalPortal);

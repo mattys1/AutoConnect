@@ -159,11 +159,9 @@ public class RouteBuilder {
             }
         }
 
-        Log.info("Portal graph: {}", portalGraph.vertexSet());
-
         if(clusters.size() <= 1) {
-//            return clusters.stream().findFirst().get().findPath(start, end);
-            return Collections.emptyList();
+            return clusters.stream().findFirst().get().findPath(start, end);
+//            return clusters.stream().findFirst();
         }
 
         clusters.forEach(c -> c.setRouteBetweenBlockAndPortals(end, portalGraph));
@@ -176,6 +174,8 @@ public class RouteBuilder {
                 new Portal(endCluster, endCluster, end, end)
         );
         assert path.getVertexList().size() != 1 : "Path shouldn't go through only one portal, path: " + path.getVertexList();
+
+        Log.info("Portal graph: {}", portalGraph);
 
         ArrayList<BlockPos> fullPath = new ArrayList<>();
         for(int i = 1; i < path.getVertexList().size(); i++) {

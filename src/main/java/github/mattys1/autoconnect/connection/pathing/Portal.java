@@ -67,4 +67,8 @@ class Portal {
         int hB = 31 * c2.hashCode() + p2.hashCode();
         return (hA ^ hB) + (hA + hB);
     }
+
+    @Override public String toString() {
+        return String.format("Portal{(c1=%s p1=%s),(c2=%s p2=%s)}", c1, p1, c2, p2);
+    }
 }
