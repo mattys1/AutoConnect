@@ -99,22 +99,9 @@ public class Connection {
 
         endPos = end;
 
-
 //        long start = System.nanoTime();
-//        final List<BlockPos> placeables = getEmptySpaceAroundBoundingBox(getBoundingBoxOfConnectionArea());
-//        long endTime = System.nanoTime();
-//        Log.info("Got empty space in {}ms, with {} air blocks", abs(start - endTime) / 1_000_000., placeables.size());
-//
-//        start = System.nanoTime();
-//        builder.addPositionsToRoute(placeables);
-//        endTime = System.nanoTime();
-//        Log.info("Built graph in {}ms, with {} blocks", abs(start - endTime) / 1_000_000., placeables.size());
-//
-//        builder.setGoal(end.getAdjacentOfFace());
-//
-//        start = System.nanoTime();
         currentPath = builder.getRoute();
-//        endTime = System.nanoTime();
+//        long endTime = System.nanoTime();
 //        Log.info("Got route in {}ms, with {} blocks", abs(start - endTime) / 1_000_000., placeables.size());
 
 //        Log.info("Have {} {}, and need {}", inventoryManager.getConnectionItemCount(), inventoryManager.connectionItem, currentPath.size());

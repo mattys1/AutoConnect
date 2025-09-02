@@ -1,11 +1,12 @@
 package github.mattys1.autoconnect.connection.pathing;
 
+import github.mattys1.autoconnect.Config;
 import github.mattys1.autoconnect.Log;
+import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import net.minecraft.client.renderer.RenderGlobal;
 import net.minecraft.util.math.AxisAlignedBB;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Vec3i;
-import org.jgrapht.alg.shortestpath.AStarShortestPath;
 import org.jgrapht.alg.shortestpath.DijkstraShortestPath;
 import org.jgrapht.graph.DefaultWeightedEdge;
 import org.jgrapht.graph.SimpleWeightedGraph;
@@ -18,6 +19,7 @@ public class RouteBuilder {
     private BlockPos end = null;
     private BlockPos oldEnd = null; // hack?
     private final Set<Cluster> clusters = new HashSet<>();
+    private final Long2ObjectOpenHashMap<Cluster> clusterByPosition = new Long2ObjectOpenHashMap<>();
     private final SimpleWeightedGraph<Portal, DefaultWeightedEdge> portalGraph = new SimpleWeightedGraph<>(DefaultWeightedEdge.class);
 
     public RouteBuilder(final BlockPos startPos) {
@@ -45,19 +47,23 @@ public class RouteBuilder {
                     cluster.pos.getZ() + neighbourOffset.getZ()
             );
 
-            clusters.stream().filter(c -> c.pos.equals(neighbourPos)).findAny().ifPresent(neighbours::add); // FIXME: dumb
+            final Cluster neighbour = clusterByPosition.get(Cluster.getPackedPos(neighbourPos));
+            if(neighbour != null) neighbours.add(neighbour);
         }
 
         return neighbours;
     }
 
     // start with chunks in the bounding box between start and end
-    private void setChunksBetweenStartAndGoal() {
+    private void setClustersBetweenStartAndGoal() {
         final Cluster startCluster = Cluster.fromBlockCoordinates(start.getX(), start.getY(), start.getZ());
         final Cluster endCluster = Cluster.fromBlockCoordinates(end.getX(), end.getY(), end.getZ());
 
         clusters.add(startCluster);
         clusters.add(endCluster);
+
+        clusterByPosition.put(startCluster.getPackedPos(), startCluster);
+        clusterByPosition.put(endCluster.getPackedPos(), endCluster);
 
         final Vec3i mins = new Vec3i(
                 Math.min(startCluster.pos.getX(), endCluster.pos.getX()),
@@ -80,6 +86,7 @@ public class RouteBuilder {
                     }
 
                     clusters.add(cluster);
+                    clusterByPosition.put(startCluster.getPackedPos(), startCluster);
                 }
             }
         }
@@ -97,6 +104,8 @@ public class RouteBuilder {
                         neigbhour.removePortalsWith(c);
                     }
             );
+
+            clusterByPosition.remove(c.getPackedPos());
         }
 
         clusters.removeAll(outside);
@@ -132,7 +141,7 @@ public class RouteBuilder {
         this.end = end;
 
         if(hasGoalChangedChunk()) {
-            setChunksBetweenStartAndGoal();
+            setClustersBetweenStartAndGoal();
             Log.info("Chunks between start and goal: {}", clusters);
         }
     }
@@ -161,7 +170,6 @@ public class RouteBuilder {
 
         if(clusters.size() <= 1) {
             return clusters.stream().findFirst().get().findPath(start, end);
-//            return clusters.stream().findFirst();
         }
 
         clusters.forEach(c -> c.setRouteBetweenBlockAndPortals(end, portalGraph));
@@ -169,13 +177,17 @@ public class RouteBuilder {
         final Cluster startCluster = Cluster.fromBlockCoordinates(start.getX(), start.getY(), start.getZ());
         final Cluster endCluster = Cluster.fromBlockCoordinates(end.getX(), end.getY(), end.getZ());
 
+        Log.info("Portal graph: {}", portalGraph);
+
         final var path = new DijkstraShortestPath<>(portalGraph).getPath(
                 new Portal(startCluster, startCluster, start, start),
                 new Portal(endCluster, endCluster, end, end)
         );
-        assert path.getVertexList().size() != 1 : "Path shouldn't go through only one portal, path: " + path.getVertexList();
+        if(path == null) {
+//            return Collections.emptyList();
+        }
 
-        Log.info("Portal graph: {}", portalGraph);
+        assert path.getVertexList().size() != 1 : "Path shouldn't go through only one portal, path: " + path.getVertexList();
 
         ArrayList<BlockPos> fullPath = new ArrayList<>();
         for(int i = 1; i < path.getVertexList().size(); i++) {

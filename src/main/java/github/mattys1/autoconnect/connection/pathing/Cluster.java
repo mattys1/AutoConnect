@@ -438,6 +438,10 @@ class Cluster {
         GlStateManager.popMatrix();
     }
 
+    private static long packPos(final Vec3i pos) {
+        return ((long)pos.getX() & 0x3FFFFFF) << 38 | ((long)pos.getY() & 0xFFF) << 26 | ((long)pos.getZ() & 0x3FFFFFF);
+    }
+
     private Cluster(Vec3i vec) {
         pos = vec;
 
@@ -482,7 +486,7 @@ class Cluster {
         assert this.isAdjacent(other) : String.format("Attempting to remove portals with non-adjacent cluster, this: %s, other %s", this, other);
 
         final EnumFacing direction = getAdjacentDirection(other);
-        for(final var portal : portalsBySide.get(direction)) {
+        for(final var portal : portalsBySide.getOrDefault(direction, Collections.emptyList())) {
             final var node = nodeByPosition.get(portal.getPortalPosForCluster(other).toLong());
             if(node == null) {
                 Log.warn("Orphaned node in portal, %s", portal);
@@ -505,6 +509,14 @@ class Cluster {
                 new BlockPos(pos.getX() << 4, pos.getY() << 4, pos.getZ() << 4),
                 new BlockPos((pos.getX() << 4) + 15, (pos.getY() << 4) + 15, (pos.getZ() << 4) + 15)
         );
+    }
+
+    public long getPackedPos() {
+        return packPos(pos);
+    }
+
+    public static long getPackedPos(final Vec3i aPos) {
+        return packPos(aPos);
     }
 
     @Override
